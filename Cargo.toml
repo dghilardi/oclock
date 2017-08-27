@@ -1,0 +1,6 @@
+[package]
+name = "time-monitor"
+version = "0.1.0"
+authors = ["Davide Ghilardi <ghilardi.davide@gmail.com>"]
+
+[dependencies]
