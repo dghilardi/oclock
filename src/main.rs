@@ -9,12 +9,11 @@ use std::time::Duration;
 
 use std::io::{Read, Write};
 
-const CLIENT_DEVICE_URL: &'static str = "ipc:///tmp/reqrep_example_front.ipc";
-const SERVER_DEVICE_URL: &'static str = "ipc:///tmp/reqrep_example_back.ipc";
+const SERVER_URL: &'static str = "ipc:///tmp/time-monitor.ipc";
 
 fn client() {
     let mut socket = Socket::new(Protocol::Req).unwrap();
-    let mut endpoint = socket.connect(CLIENT_DEVICE_URL).unwrap();
+    let mut endpoint = socket.connect(SERVER_URL).unwrap();
     let mut count = 1u32;
 
     let mut reply = String::new();
@@ -49,7 +48,7 @@ fn client() {
 
 fn server() {
     let mut socket = Socket::new(Protocol::Rep).unwrap();
-    let mut endpoint = socket.connect(SERVER_DEVICE_URL).unwrap();
+    let mut endpoint = socket.bind(SERVER_URL).unwrap();
     let mut count = 1u32;
 
     let mut request = String::new();
@@ -84,20 +83,6 @@ fn server() {
     endpoint.shutdown();
 }
 
-fn device() {
-    let mut front_socket = Socket::new_for_device(Protocol::Rep).unwrap();
-    let mut front_endpoint = front_socket.bind(CLIENT_DEVICE_URL).unwrap();
-    let mut back_socket = Socket::new_for_device(Protocol::Req).unwrap();
-    let mut back_endpoint = back_socket.bind(SERVER_DEVICE_URL).unwrap();
-
-    println!("Device is ready.");
-    Socket::device(&front_socket, &back_socket);
-    println!("Device is stopped.");
-
-    front_endpoint.shutdown();
-    back_endpoint.shutdown();
-}
-
 fn usage() {
     println!("Usage: reqrep [client|server|device]");
     println!("  Try running several clients and servers");
@@ -115,7 +100,6 @@ fn main() {
     match args[1].as_ref() {
         "client" => client(),
         "server" => server(),
-        "device" => device(),
         _ => usage()
     }
 }
