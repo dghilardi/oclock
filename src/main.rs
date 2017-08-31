@@ -1,6 +1,9 @@
 #![allow(unused_must_use)]
 
 extern crate nanomsg;
+extern crate getopts;
+
+use getopts::Options;
 
 use nanomsg::{Socket, Protocol};
 
@@ -83,23 +86,35 @@ fn server() {
     endpoint.shutdown();
 }
 
-fn usage() {
-    println!("Usage: reqrep [client|server|device]");
-    println!("  Try running several clients and servers");
-    println!("  And also try killing and restarting them");
-    println!("  Don't forget to start the device !");
+fn print_usage(program: &str, opts: Options) {
+    let brief = format!("Usage: {} [options]", program);
+    print!("{}", opts.usage(&brief));
 }
 
 fn main() {
     let args: Vec<_> = std::env::args().collect();
+    let program = args[0].clone();
 
-    if args.len() < 2 {
-        return usage()
+    let mut opts = Options::new();
+    opts.optopt("m", "mode", "oclock operation mode", "MODE");
+    opts.optflag("h", "help", "print this help menu");
+
+    let matches = match opts.parse(&args[1..]) {
+        Ok(m) => { m }
+        Err(f) => { panic!(f.to_string()) }
+    };
+
+    if matches.opt_present("h") {
+        print_usage(&program, opts);
+        return;
     }
 
-    match args[1].as_ref() {
-        "client" => client(),
-        "server" => server(),
-        _ => usage()
-    }
+    match matches.opt_str("m") {
+        Some(ref mode) if mode == "client" => client(),
+        Some(ref mode) if mode == "server" => server(),
+        Some(mode) =>
+            println!("mode {}", mode),
+        None =>
+            print_usage(&program, opts),
+    };
 }
