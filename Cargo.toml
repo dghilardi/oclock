@@ -1,5 +1,5 @@
 [package]
-name = "time-monitor"
+name = "oclock"
 version = "0.1.0"
 authors = ["Davide Ghilardi <ghilardi.davide@gmail.com>"]
 
