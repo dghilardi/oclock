@@ -7,9 +7,6 @@ use getopts::Options;
 
 use nanomsg::{Socket, Protocol};
 
-use std::thread;
-use std::time::Duration;
-
 use std::io::{Read, Write};
 
 mod core;
@@ -19,33 +16,22 @@ use core::server::server;
 fn client() {
     let mut socket = Socket::new(Protocol::Req).unwrap();
     let mut endpoint = socket.connect(server::SERVER_URL).unwrap();
-    let mut count = 1u32;
 
     let mut reply = String::new();
 
-    loop {
-        let request = format!("Request #{}", count);
+    let request = format!("PUSH_TASK#Roboadvisor");
 
-        match socket.write_all(request.as_bytes()) {
-            Ok(..) => println!("Send '{}'.", request),
-            Err(err) => {
-                println!("Client failed to send request '{}'.", err);
-                break
-            }
-        }
+    match socket.write_all(request.as_bytes()) {
+        Ok(..) => println!("Send '{}'.", request),
+        Err(err) => println!("Client failed to send request '{}'.", err)
+    }
 
-        match socket.read_to_string(&mut reply) {
-            Ok(_) => {
-                println!("Recv '{}'.", reply);
-                reply.clear()
-            },
-            Err(err) => {
-                println!("Client failed to receive reply '{}'.", err);
-                break
-            }
-        }
-        thread::sleep(Duration::from_millis(100));
-        count += 1;
+    match socket.read_to_string(&mut reply) {
+        Ok(_) => {
+            println!("Recv '{}'.", reply);
+            reply.clear()
+        },
+        Err(err) => println!("Client failed to receive reply '{}'.", err),
     }
 
     endpoint.shutdown();
