@@ -12,11 +12,13 @@ use std::time::Duration;
 
 use std::io::{Read, Write};
 
-const SERVER_URL: &'static str = "ipc:///tmp/time-monitor.ipc";
+mod core;
+
+use core::server::server;
 
 fn client() {
     let mut socket = Socket::new(Protocol::Req).unwrap();
-    let mut endpoint = socket.connect(SERVER_URL).unwrap();
+    let mut endpoint = socket.connect(server::SERVER_URL).unwrap();
     let mut count = 1u32;
 
     let mut reply = String::new();
@@ -49,43 +51,6 @@ fn client() {
     endpoint.shutdown();
 }
 
-fn server() {
-    let mut socket = Socket::new(Protocol::Rep).unwrap();
-    let mut endpoint = socket.bind(SERVER_URL).unwrap();
-    let mut count = 1u32;
-
-    let mut request = String::new();
-
-    println!("Server is ready.");
-
-    loop {
-
-        match socket.read_to_string(&mut request) {
-            Ok(_) => {
-                println!("Recv '{}'.", request);
-
-                let reply = format!("{} -> Reply #{}", request, count);
-                match socket.write_all(reply.as_bytes()) {
-                    Ok(..) => println!("Sent '{}'.", reply),
-                    Err(err) => {
-                        println!("Server failed to send reply '{}'.", err);
-                        break
-                    }
-                }
-                request.clear();
-                thread::sleep(Duration::from_millis(400));
-                count += 1;
-            },
-            Err(err) => {
-                println!("Server failed to receive request '{}'.", err);
-                break
-            }
-        }
-    }
-
-    endpoint.shutdown();
-}
-
 fn print_usage(program: &str, opts: Options) {
     let brief = format!("Usage: {} [options]", program);
     print!("{}", opts.usage(&brief));
@@ -111,7 +76,7 @@ fn main() {
 
     match matches.opt_str("m") {
         Some(ref mode) if mode == "client" => client(),
-        Some(ref mode) if mode == "server" => server(),
+        Some(ref mode) if mode == "server" => server::server(),
         Some(mode) =>
             println!("mode {}", mode),
         None =>
