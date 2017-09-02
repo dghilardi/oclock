@@ -21,3 +21,7 @@ test:cargo:
   script:
   - rustc --version && cargo --version      # Print version info for debugging
   - cargo test --verbose --jobs 1 --release # Don't paralize to make errors more readable
+  artifacts:
+    paths:
+      - target/release/oclock
+    when: always
