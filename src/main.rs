@@ -3,6 +3,9 @@
 extern crate nanomsg;
 extern crate getopts;
 
+
+extern crate oclock_sqlite;
+
 use getopts::Options;
 
 use nanomsg::{Socket, Protocol};

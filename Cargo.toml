@@ -6,3 +6,6 @@ authors = ["Davide Ghilardi <ghilardi.davide@gmail.com>"]
 [dependencies]
 nanomsg = "0.6.2"
 getopts = "0.2"
+
+[dependencies.oclock_sqlite]
+path = "libs/oclock_sqlite"

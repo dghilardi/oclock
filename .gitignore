@@ -1,2 +1,8 @@
 /target/
 **/*.rs.bk
+
+# databases
+*.db
+
+# libs
+/libs/oclock_sqlite/target/
