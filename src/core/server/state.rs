@@ -1,4 +1,11 @@
 use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
+use std::fmt;
+
+use oclock_sqlite::connection::DB;
+use oclock_sqlite::schema;
+use oclock_sqlite::models::{NewEvent, NewTask};
+use oclock_sqlite::mappers;
 
 #[derive(Debug)]
 pub struct Task {
@@ -6,10 +13,17 @@ pub struct Task {
     pub name: String,
 }
 
+#[derive(Debug)]
 pub enum SystemEventType {
     Startup,
     Shutdown,
     Ping,
+}
+
+impl fmt::Display for SystemEventType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 pub enum EventType {
@@ -23,6 +37,7 @@ pub struct Event {
 }
 
 pub struct State {
+    pub database: DB,
     pub tasks: Vec<Task>,
     pub history: Vec<Event>,
 }
@@ -30,30 +45,55 @@ pub struct State {
 impl State {
     pub fn new() -> State {
         State {
+            database: DB::new("oclock.db".to_string()),
             tasks: Vec::new(),
             history: Vec::new(),
         }
     }
 
     pub fn new_task(&mut self, name: String) {
-        let new_task_id = self.tasks.len() as u64;
-        self.tasks.push(Task{id: new_task_id, name: name});
-        println!("{:?}", self.tasks);
+        use self::schema::tasks;
+
+        let new_task = NewTask {
+            name: name
+        };
+
+        let connection = self.database.establish_connection();
+
+        mappers::tasks::create_task(&connection, &new_task);
     }
 
     pub fn switch_task(&mut self, id: u64) -> Result<String, String> {
-        match self.tasks.iter().find(|&x| x.id == id) {
-            Some(task) => {
-                self.history.push(Event{event_type: EventType::TaskSwitch(id), timestamp: SystemTime::now()});
-                Result::Ok(format!("Switched to task '{}'", task.name))
-            }
-            None => {
-                Result::Err(format!("No task with id {}", id))
-            }
+        let unix_now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+
+        let connection = self.database.establish_connection();
+
+        let event = NewEvent {
+            event_timestamp: unix_now as i32,
+            task_id: Some(id as i32),
+            system_event_name: None,
+        };
+
+        match mappers::events::push_event(&connection, &event) {
+            Ok(evt_id) => Result::Ok(format!("New event id '{}'", evt_id)),
+            Err(err) => Result::Err(format!("Error during task switch '{}'", err)),
         }
     }
 
-    pub fn system_event(&mut self, evt: SystemEventType) {
-        self.history.push(Event{event_type: EventType::SystemEvent(evt), timestamp: SystemTime::now()});
+    pub fn system_event(&mut self, evt: SystemEventType) -> Result<String, String> {
+        let unix_now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+
+        let connection = self.database.establish_connection();
+
+        let event = NewEvent {
+            event_timestamp: unix_now as i32,
+            task_id: None,
+            system_event_name: Some(evt.to_string()),
+        };
+
+        match mappers::events::push_event(&connection, &event) {
+            Ok(evt_id) => Result::Ok(format!("New event id '{}'", evt_id)),
+            Err(err) => Result::Err(format!("Error inserting system event '{}'", err)),
+        }
     }
 }
