@@ -93,6 +93,7 @@ fn nanomsg_listen(cmd_sender: mpsc::Sender<Command>, thread_cmd_receiver: mpsc::
 pub fn server() {
     let mut state = State::new();
     state.system_event(SystemEventType::Startup);
+    state.system_event(SystemEventType::Ping);
 
     let (cmd_sender, cmd_receiver) = mpsc::channel();
     let (thread_cmd_sender, thread_cmd_receiver) = mpsc::channel();

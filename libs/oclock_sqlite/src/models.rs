@@ -21,7 +21,7 @@ pub struct NewEvent {
     pub system_event_name: Option<String>,
 }
 
-#[derive(Queryable)]
+#[derive(Debug, Queryable)]
 pub struct Event {
     pub id: i32,
     pub event_timestamp: i32,

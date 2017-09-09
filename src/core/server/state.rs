@@ -3,15 +3,8 @@ use std::time::UNIX_EPOCH;
 use std::fmt;
 
 use oclock_sqlite::connection::DB;
-use oclock_sqlite::schema;
 use oclock_sqlite::models::{NewEvent, NewTask};
 use oclock_sqlite::mappers;
-
-#[derive(Debug)]
-pub struct Task {
-    pub id: u64,
-    pub name: String,
-}
 
 #[derive(Debug)]
 pub enum SystemEventType {
@@ -26,33 +19,49 @@ impl fmt::Display for SystemEventType {
     }
 }
 
-pub enum EventType {
-    SystemEvent(SystemEventType),
-    TaskSwitch(u64),
-}
-
-pub struct Event {
-    pub event_type: EventType,
-    pub timestamp: SystemTime,
-}
-
 pub struct State {
-    pub database: DB,
-    pub tasks: Vec<Task>,
-    pub history: Vec<Event>,
+    database: DB,
+}
+
+fn initialize(database: DB) -> DB {
+    let connection = database.establish_connection();
+
+    match mappers::events::get_last_event(&connection) {
+        Ok(last_event) =>
+            match last_event.system_event_name {
+                Some(ref sys_evt) if sys_evt == &SystemEventType::Shutdown.to_string() =>
+                    debug!("Already in correct state"),
+                Some(_) | None => {
+                    debug!("found non shutdown event");
+
+                    let new_ts = last_event.event_timestamp;
+                    
+                    let event = NewEvent {
+                        event_timestamp: new_ts,
+                        task_id: None,
+                        system_event_name: Some(SystemEventType::Shutdown.to_string()),
+                    };
+
+                    mappers::events::push_event(&connection, &event);
+                    mappers::events::remove_all_system_events(&connection, SystemEventType::Ping.to_string());
+                }
+            },
+        Err(e) => 
+            debug!("Error: {:?}", e)
+    }
+
+    database
 }
 
 impl State {
+
     pub fn new() -> State {
         State {
-            database: DB::new("oclock.db".to_string()),
-            tasks: Vec::new(),
-            history: Vec::new(),
+            database: initialize(DB::new("oclock.db".to_string()))
         }
     }
 
     pub fn new_task(&mut self, name: String) {
-        use self::schema::tasks;
 
         let new_task = NewTask {
             name: name
