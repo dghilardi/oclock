@@ -3,6 +3,9 @@
 extern crate nanomsg;
 extern crate getopts;
 
+#[macro_use]
+extern crate log;
+extern crate env_logger;
 
 extern crate oclock_sqlite;
 
@@ -46,6 +49,8 @@ fn print_usage(program: &str, opts: Options) {
 }
 
 fn main() {
+    env_logger::init();
+
     let args: Vec<_> = std::env::args().collect();
     let program = args[0].clone();
 
