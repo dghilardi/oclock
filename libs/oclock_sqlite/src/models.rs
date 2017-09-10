@@ -7,7 +7,7 @@ pub struct NewTask {
     pub name: String,
 }
 
-#[derive(Queryable)]
+#[derive(Queryable, Serialize)]
 pub struct Task {
     pub id: i32,
     pub name: String,

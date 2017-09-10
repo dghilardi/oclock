@@ -3,7 +3,7 @@ use std::time::UNIX_EPOCH;
 use std::fmt;
 
 use oclock_sqlite::connection::DB;
-use oclock_sqlite::models::{NewEvent, NewTask};
+use oclock_sqlite::models::{NewEvent, NewTask, Task};
 use oclock_sqlite::mappers;
 
 #[derive(Debug)]
@@ -114,5 +114,13 @@ impl State {
         let connection = self.database.establish_connection();
 
         mappers::events::move_system_event(&connection, unix_now as i32, SystemEventType::Ping.to_string())
+    }
+
+    pub fn list_tasks(&self) -> Result<Vec<Task>, String> {
+        let connection = self.database.establish_connection();
+        match mappers::tasks::list_tasks(&connection) {
+            Ok(v) => Ok(v),
+            Err(e) => Err(format!("Error retrieving tasks list: '{}'", e))
+        }
     }
 }

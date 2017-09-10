@@ -10,6 +10,9 @@ extern crate env_logger;
 
 extern crate schedule;
 
+extern crate csv;
+extern crate serde;
+
 extern crate oclock_sqlite;
 
 use getopts::Options;

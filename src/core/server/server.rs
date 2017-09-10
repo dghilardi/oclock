@@ -1,12 +1,16 @@
-use nanomsg::{Socket, Protocol, Error};
+use nanomsg;
+use nanomsg::{Socket, Protocol};
 
 use std::str;
 use std::thread;
 use std::time::Duration;
+use std::error::Error;
 
 use schedule::{Agenda, Job};
 
 use std::io::{Write};
+use csv::Writer;
+use serde;
 
 use core::server::state::{State, SystemEventType};
 use core::server::constants::Commands;
@@ -21,18 +25,41 @@ enum MsgListenerStatus {
     Fail
 }
 
+fn vec_to_csv<T>(items: Vec<T>) -> Result<String, Box<Error>> where
+    T: serde::ser::Serialize
+{
+    let mut wtr = Writer::from_writer(vec![]);
+    for item in items {
+        wtr.serialize(item);
+    }
+
+    let data = String::from_utf8(wtr.into_inner()?)?;
+    Ok(data)
+}
+
 fn handle_msg(msg: &str, state: &State) -> Result<String, String> {
-    let splitted_cmd = msg.split(SEP).collect::<String>();
+    let splitted_cmd: Vec<&str> = msg.split(SEP).collect();
     let (command, args) = splitted_cmd.split_at(1);
-    match command {
-        m if m == Commands::Exit.to_string() => Ok(format!("bye bye...")),
-        m if m == Commands::PushTask.to_string() => state.new_task(args.to_string()),
-        m if m == Commands::SwitchTask.to_string() => {
-            let task_id = args.parse::<u64>().unwrap();
+    match command.first() {
+        Some(m) if m == &Commands::Exit.to_string() => Ok(format!("bye bye...")),
+        Some(m) if m == &Commands::ListTasks.to_string() => {
+            let tasks = state.list_tasks()?;
+            match vec_to_csv(tasks) {
+                Ok(csv) => Ok(csv),
+                Err(e) => Err(format!("Error generating csv '{}'", e))
+            }
+        },
+        Some(m) if m == &Commands::PushTask.to_string() => state.new_task(args.join(SEP)),
+        Some(m) if m == &Commands::SwitchTask.to_string() => {
+            let task_id = args.join(SEP).parse::<u64>().unwrap();
             state.switch_task(task_id)
         },
-        no_match => {
-            error!("message '{}' not handled", no_match);
+        Some(no_match) => {
+            error!("message '{:?}' not handled", no_match);
+            Err(format!("Not recognized"))
+        },
+        None => {
+            error!("command not recognized");
             Err(format!("Not recognized"))
         }
     }
@@ -75,7 +102,7 @@ fn nanomsg_listen(socket: &mut Socket, state: &State) -> MsgListenerStatus {
 
             status
         },
-        Err(Error::TryAgain) => {
+        Err(nanomsg::Error::TryAgain) => {
             debug!("No message received");
             MsgListenerStatus::Continue
         },
