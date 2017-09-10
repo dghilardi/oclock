@@ -15,3 +15,12 @@ table! {
 }
 
 joinable!(events -> tasks (task_id));
+
+table! {
+    v_timesheet (id) {
+        id -> Integer,
+        day -> Text,
+        task_name -> Nullable<Text>,
+        amount -> Integer,
+    }
+}

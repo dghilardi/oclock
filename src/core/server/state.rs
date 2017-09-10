@@ -3,7 +3,7 @@ use std::time::UNIX_EPOCH;
 use std::fmt;
 
 use oclock_sqlite::connection::DB;
-use oclock_sqlite::models::{NewEvent, NewTask, Task};
+use oclock_sqlite::models::{NewEvent, NewTask, Task, TimesheetEntry};
 use oclock_sqlite::mappers;
 
 #[derive(Debug)]
@@ -121,6 +121,14 @@ impl State {
         match mappers::tasks::list_tasks(&connection) {
             Ok(v) => Ok(v),
             Err(e) => Err(format!("Error retrieving tasks list: '{}'", e))
+        }
+    }
+
+    pub fn full_timesheet(&self) -> Result<Vec<TimesheetEntry>, String> {
+        let connection = self.database.establish_connection();
+        match mappers::timesheet::full_timesheet(&connection) {
+            Ok(v) => Ok(v),
+            Err(e) => Err(format!("Error generating timesheet: '{}'", e))
         }
     }
 }

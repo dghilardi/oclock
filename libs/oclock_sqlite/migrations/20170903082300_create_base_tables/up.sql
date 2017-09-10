@@ -40,12 +40,14 @@ ORDER BY
 
 CREATE VIEW v_timesheet AS
 SELECT
+    min(vh.id) as id,
     vh.day,
     vh.task_name,
     sum(vh.ts_end - vh.ts_start) AS amount
 FROM
     (
         SELECT
+            id,
             task_name,
             ts_start,
             ts_end,
@@ -53,6 +55,8 @@ FROM
         FROM
             v_history
     ) vh
+WHERE
+    vh.ts_end IS NOT NULL
 GROUP BY
     vh.day,
     vh.task_name

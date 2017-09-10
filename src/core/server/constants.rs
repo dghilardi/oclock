@@ -6,7 +6,8 @@ pub enum Commands {
     Exit,
     PushTask,
     SwitchTask,
-    ListTasks
+    ListTasks,
+    Timesheet,
 }
 
 impl fmt::Display for Commands {

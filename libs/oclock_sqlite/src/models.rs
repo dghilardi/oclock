@@ -28,3 +28,11 @@ pub struct Event {
     pub task_id: Option<i32>,
     pub system_event_name: Option<String>,
 }
+
+#[derive(Debug, Queryable, Serialize)]
+pub struct TimesheetEntry {
+    pub id: i32,
+    pub day: String,
+    pub task_name: Option<String>,
+    pub amount: i32,
+}

@@ -49,6 +49,13 @@ fn handle_msg(msg: &str, state: &State) -> Result<String, String> {
                 Err(e) => Err(format!("Error generating csv '{}'", e))
             }
         },
+        Some(m) if m == &Commands::Timesheet.to_string() => {
+            let timesheet = state.full_timesheet()?;
+            match vec_to_csv(timesheet) {
+                Ok(csv) => Ok(csv),
+                Err(e) => Err(format!("Error generating csv '{}'", e)),
+            }
+        },
         Some(m) if m == &Commands::PushTask.to_string() => state.new_task(args.join(SEP)),
         Some(m) if m == &Commands::SwitchTask.to_string() => {
             let task_id = args.join(SEP).parse::<u64>().unwrap();
