@@ -9,16 +9,33 @@ use schedule::{Agenda, Job};
 use std::io::{Write};
 
 use core::server::state::{State, SystemEventType};
+use core::server::constants::Commands;
 
 pub const SERVER_URL: &'static str = "ipc:///tmp/time-monitor.ipc";
 
-pub const PREFIX_PUSH_TASK: &'static str = "PUSH_TASK#";
-pub const PREFIX_SWITCH_TASK: &'static str = "SWITCH_TASK#";
+pub const SEP: &'static str = "#";
 
 enum MsgListenerStatus {
     Continue,
     Terminate,
     Fail
+}
+
+fn handle_msg(msg: &str, state: &State) -> Result<String, String> {
+    let splitted_cmd = msg.split(SEP).collect::<String>();
+    let (command, args) = splitted_cmd.split_at(1);
+    match command {
+        m if m == Commands::Exit.to_string() => Ok(format!("bye bye...")),
+        m if m == Commands::PushTask.to_string() => state.new_task(args.to_string()),
+        m if m == Commands::SwitchTask.to_string() => {
+            let task_id = args.parse::<u64>().unwrap();
+            state.switch_task(task_id)
+        },
+        no_match => {
+            error!("message '{}' not handled", no_match);
+            Err(format!("Not recognized"))
+        }
+    }
 }
 
 fn nanomsg_listen(socket: &mut Socket, state: &State) -> MsgListenerStatus {
@@ -34,20 +51,7 @@ fn nanomsg_listen(socket: &mut Socket, state: &State) -> MsgListenerStatus {
 
             let cmd_outcome =
             match str::from_utf8(buffer.as_slice()) {
-                Ok(msg) if msg == "EXIT" => {
-                    Ok(format!("bye bye..."))
-                },
-                Ok(msg) if msg.starts_with(PREFIX_PUSH_TASK) => {
-                    state.new_task(msg.replace(PREFIX_PUSH_TASK, ""))
-                },
-                Ok(msg) if msg.starts_with(PREFIX_SWITCH_TASK) && msg.replace(PREFIX_SWITCH_TASK, "").parse::<u64>().is_ok() => {
-                    let task_id = msg.replace(PREFIX_SWITCH_TASK, "").parse::<u64>().unwrap();
-                    state.switch_task(task_id)
-                },
-                Ok(msg) => {
-                    error!("message '{}' not handled", msg);
-                    Err(format!("Not recognized"))
-                },
+                Ok(msg) => handle_msg(msg, state),
                 Err(e) => {
                     error!("Invalid UTF-8 sequence: {}", e);
                     Err(format!("Invalid UTF-8 sequence"))

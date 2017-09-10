@@ -6,6 +6,7 @@ authors = ["Davide Ghilardi <ghilardi.davide@gmail.com>"]
 [dependencies]
 log = "0.3"
 env_logger = "0.3"
+Inflector = {version="*", default-features=false}
 
 nanomsg = "0.6.2"
 getopts = "0.2"
