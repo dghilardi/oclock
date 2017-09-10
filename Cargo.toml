@@ -10,5 +10,7 @@ env_logger = "0.3"
 nanomsg = "0.6.2"
 getopts = "0.2"
 
+schedule = "0.1.0"
+
 [dependencies.oclock_sqlite]
 path = "libs/oclock_sqlite"

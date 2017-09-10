@@ -61,7 +61,7 @@ impl State {
         }
     }
 
-    pub fn new_task(&mut self, name: String) {
+    pub fn new_task(&self, name: String) -> Result<String, String> {
 
         let new_task = NewTask {
             name: name
@@ -69,10 +69,13 @@ impl State {
 
         let connection = self.database.establish_connection();
 
-        mappers::tasks::create_task(&connection, &new_task);
+        match mappers::tasks::create_task(&connection, &new_task) {
+            Ok(task_id) => Result::Ok(format!("New task id '{}'", task_id)),
+            Err(err) => Result::Err(format!("Error during task insert '{}'", err)),
+        }
     }
 
-    pub fn switch_task(&mut self, id: u64) -> Result<String, String> {
+    pub fn switch_task(&self, id: u64) -> Result<String, String> {
         let unix_now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
         let connection = self.database.establish_connection();
@@ -89,7 +92,7 @@ impl State {
         }
     }
 
-    pub fn system_event(&mut self, evt: SystemEventType) -> Result<String, String> {
+    pub fn system_event(&self, evt: SystemEventType) -> Result<String, String> {
         let unix_now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
         let connection = self.database.establish_connection();
@@ -104,5 +107,12 @@ impl State {
             Ok(evt_id) => Result::Ok(format!("New event id '{}'", evt_id)),
             Err(err) => Result::Err(format!("Error inserting system event '{}'", err)),
         }
+    }
+
+    pub fn ping(&self) {
+        let unix_now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        let connection = self.database.establish_connection();
+
+        mappers::events::move_system_event(&connection, unix_now as i32, SystemEventType::Ping.to_string())
     }
 }

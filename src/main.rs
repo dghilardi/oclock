@@ -7,6 +7,8 @@ extern crate getopts;
 extern crate log;
 extern crate env_logger;
 
+extern crate schedule;
+
 extern crate oclock_sqlite;
 
 use getopts::Options;

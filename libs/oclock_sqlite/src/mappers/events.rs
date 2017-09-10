@@ -26,7 +26,16 @@ pub fn remove_all_system_events(conn: &SqliteConnection, event_name: String) {
 
     let num_deleted = diesel::delete(events.filter(system_event_name.eq(&event_name)))
         .execute(conn)
-        .expect("Error deleting posts");
+        .expect(&format!("Error deleting system event {}", event_name));
 
     debug!("deleted {} system events with type {}", num_deleted, event_name);
+}
+
+pub fn move_system_event(conn: &SqliteConnection, unix_ts: i32, event_name: String) {
+    use schema::events::dsl::*;
+
+    diesel::update(events.filter(system_event_name.eq(&event_name)))
+        .set(event_timestamp.eq(unix_ts))
+        .execute(conn)
+        .expect(&format!("Error updating {} timestamp", event_name));
 }
