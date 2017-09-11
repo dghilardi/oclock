@@ -55,9 +55,9 @@ fn initialize(database: DB) -> DB {
 
 impl State {
 
-    pub fn new() -> State {
+    pub fn new(cfg_path: String) -> State {
         State {
-            database: initialize(DB::new("oclock.db".to_string()))
+            database: initialize(DB::new(format!("{}/oclock.db", cfg_path)))
         }
     }
 

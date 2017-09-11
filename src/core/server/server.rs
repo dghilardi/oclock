@@ -2,6 +2,8 @@ use nanomsg;
 use nanomsg::{Socket, Protocol};
 
 use std::str;
+use std::env;
+use std::fs;
 use std::thread;
 use std::time::Duration;
 use std::error::Error;
@@ -125,7 +127,17 @@ pub fn server() {
     let mut nanomsg_socket = Socket::new(Protocol::Rep).unwrap();
     let mut nanomsg_endpoint = nanomsg_socket.bind(SERVER_URL).unwrap();
 
-    let state = State::new();
+    let cfg_path = 
+    match env::var("HOME") {
+        Ok(path) => format!("{}/.oclock", path),
+        Err(_) => ".".to_string()
+    };
+
+    fs::create_dir_all(&cfg_path).unwrap_or_else(|why| {
+        println!("! {:?}", why.kind());
+    });
+
+    let state = State::new(cfg_path);
     state.system_event(SystemEventType::Startup);
     state.system_event(SystemEventType::Ping);
 
