@@ -43,12 +43,12 @@ fn initialize(database: DB) -> DB {
                     };
 
                     mappers::events::push_event(&connection, &event);
-                    mappers::events::remove_all_system_events(&connection, SystemEventType::Ping.to_string());
                 }
             },
         Err(e) => 
             debug!("Error: {:?}", e)
     }
+    mappers::events::remove_all_system_events(&connection, SystemEventType::Ping.to_string());
 
     database
 }
