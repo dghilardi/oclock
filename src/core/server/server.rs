@@ -17,6 +17,10 @@ use serde;
 use core::server::state::{State, SystemEventType};
 use core::server::constants::Commands;
 
+extern crate ctrlc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
 pub const SERVER_URL: &'static str = "ipc:///tmp/time-monitor.ipc";
 
 pub const SEP: &'static str = "#";
@@ -154,6 +158,12 @@ pub fn server() {
         state.ping();
     }, "0 * * * * *".parse().unwrap()));
 
+    let running = Arc::new(AtomicBool::new(true));
+    let r = running.clone();
+    ctrlc::set_handler(move || {
+        r.store(false, Ordering::SeqCst);
+    }).expect("Error setting Ctrl-C handler");
+
     // Check and run pending jobs in agenda every 500 milliseconds
     loop {
         a.run_pending();
@@ -163,8 +173,14 @@ pub fn server() {
             _ => break,
         }
 
+        if !running.load(Ordering::SeqCst) {
+            break;
+        }
+
         thread::sleep(Duration::from_millis(300));
     }
+
+    println!("Shutting down");
 
     state.system_event(SystemEventType::Shutdown);
     nanomsg_endpoint.shutdown();
