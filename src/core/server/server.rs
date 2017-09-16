@@ -13,6 +13,7 @@ use schedule::{Agenda, Job};
 use std::io::{Write};
 use csv::Writer;
 use serde;
+use serde_json;
 
 use core::server::state::{State, SystemEventType};
 use core::server::constants::Commands;
@@ -43,6 +44,14 @@ fn vec_to_csv<T>(items: Vec<T>) -> Result<String, Box<Error>> where
     Ok(data)
 }
 
+fn compute_state(state: &State) -> Result<String, String> {
+    let tasks = state.list_tasks()?;
+    match serde_json::to_string(&tasks) {
+        Ok(json) => Ok(json),
+        Err(e) => Err(format!("Error serializing state {}", e))
+    }
+}
+
 fn handle_msg(msg: &str, state: &State) -> Result<String, String> {
     let splitted_cmd: Vec<&str> = msg.split(SEP).collect();
     let (command, args) = splitted_cmd.split_at(1);
@@ -66,6 +75,18 @@ fn handle_msg(msg: &str, state: &State) -> Result<String, String> {
         Some(m) if m == &Commands::SwitchTask.to_string() => {
             let task_id = args.join(SEP).parse::<u64>().unwrap();
             state.switch_task(task_id)
+        },
+        Some(m) if m == &Commands::JsonPushTask.to_string() => {
+            state.new_task(args.join(SEP))?;
+            compute_state(state)
+        },
+        Some(m) if m == &Commands::JsonSwitchTask.to_string() => {
+            let task_id = args.join(SEP).parse::<u64>().unwrap();
+            state.switch_task(task_id)?;
+            compute_state(state)
+        },
+        Some(m) if m == &Commands::JsonState.to_string() => {
+            compute_state(state)
         },
         Some(no_match) => {
             error!("message '{:?}' not handled", no_match);
