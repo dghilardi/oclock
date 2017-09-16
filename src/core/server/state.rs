@@ -131,4 +131,12 @@ impl State {
             Err(e) => Err(format!("Error generating timesheet: '{}'", e))
         }
     }
+
+    pub fn change_task_enabled_flag(&self, id: u64, enabled: bool) -> Result<String, String> {
+        let connection = self.database.establish_connection();
+        match mappers::tasks::change_enabled(&connection, id as i32, enabled) {
+            Ok(_) => Ok(format!("Task {} enabled: {}", id, enabled)),
+            Err(e) => Err(format!("Error switching task enabled flag: '{}'", e))
+        }
+    }
 }

@@ -10,6 +10,7 @@ table! {
 table! {
     tasks (id) {
         id -> Integer,
+        enabled -> Integer,
         name -> Text,
     }
 }

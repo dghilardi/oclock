@@ -5,9 +5,11 @@ use inflector::cases::screamingsnakecase::to_screaming_snake_case;
 pub enum Commands {
     Exit,
     PushTask,
+    DisableTask,
     SwitchTask,
     ListTasks,
     JsonPushTask,
+    JsonDisableTask,
     JsonSwitchTask,
     JsonState,
     Timesheet,

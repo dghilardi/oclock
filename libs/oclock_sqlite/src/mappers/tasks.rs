@@ -20,3 +20,11 @@ pub fn list_tasks(conn: &SqliteConnection) -> Result<Vec<Task>, Error> {
     .order(id)
     .load(conn)
 }
+
+pub fn change_enabled(conn: &SqliteConnection, task_id: i32, new_enabled: bool) -> Result<usize, Error> {
+    use schema::tasks::dsl::*;
+
+    diesel::update(tasks.filter(id.eq(&task_id)))
+        .set(enabled.eq(if new_enabled {1} else {0}))
+        .execute(conn)
+}

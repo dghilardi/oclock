@@ -72,12 +72,21 @@ fn handle_msg(msg: &str, state: &State) -> Result<String, String> {
             }
         },
         Some(m) if m == &Commands::PushTask.to_string() => state.new_task(args.join(SEP)),
+        Some(m) if m == &Commands::DisableTask.to_string() => {
+            let task_id = args.join(SEP).parse::<u64>().unwrap();
+            state.change_task_enabled_flag(task_id, false)            
+        },
         Some(m) if m == &Commands::SwitchTask.to_string() => {
             let task_id = args.join(SEP).parse::<u64>().unwrap();
             state.switch_task(task_id)
         },
         Some(m) if m == &Commands::JsonPushTask.to_string() => {
             state.new_task(args.join(SEP))?;
+            compute_state(state)
+        },
+        Some(m) if m == &Commands::JsonDisableTask.to_string() => {
+            let task_id = args.join(SEP).parse::<u64>().unwrap();
+            state.change_task_enabled_flag(task_id, false);
             compute_state(state)
         },
         Some(m) if m == &Commands::JsonSwitchTask.to_string() => {
