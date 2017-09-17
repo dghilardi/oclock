@@ -1,0 +1,13 @@
+[package]
+name = "oclock_sqlite"
+version = "0.1.1"
+authors = ["Davide Ghilardi <ghilardi.davide@gmail.com>"]
+
+[dependencies]
+log = "0.3"
+
+diesel = { version = "0.16.0", features = ["sqlite"] }
+diesel_codegen = { version = "0.16.0", features = ["sqlite"] }
+
+serde = "1.0"
+serde_derive = "1.0"

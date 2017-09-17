@@ -1,6 +1,23 @@
 [package]
-name = "time-monitor"
-version = "0.1.0"
+name = "oclock"
+version = "0.1.1"
 authors = ["Davide Ghilardi <ghilardi.davide@gmail.com>"]
 
 [dependencies]
+log = "0.3"
+env_logger = "0.3"
+Inflector = {version="*", default-features=false}
+
+nanomsg = "0.6.2"
+getopts = "0.2"
+
+schedule = "0.1.0"
+
+csv = "1.0.0-beta.4"
+serde = "1.0"
+serde_json = "1.0"
+
+ctrlc = { version = "3.0", features = ["termination"] }
+
+[dependencies.oclock_sqlite]
+path = "libs/oclock_sqlite"
