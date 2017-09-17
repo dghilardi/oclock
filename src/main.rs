@@ -26,11 +26,12 @@ mod core;
 
 use core::server::server;
 
-fn client(request: String) {
+fn client(request: String) -> bool {
     let mut socket = Socket::new(Protocol::Req).unwrap();
     let mut endpoint = socket.connect(server::SERVER_URL).unwrap();
 
     let mut reply = String::new();
+    let mut error_status = false;
 
     match socket.write_all(request.as_bytes()) {
         Ok(..) => debug!("Send '{}'.", request),
@@ -51,17 +52,20 @@ fn client(request: String) {
 
             let msg = reply.replace("ERR#","");
 
-            println!("{}", msg);
+            eprintln!("{}", msg);
+            error_status = true;
             reply.clear()
         },
         Ok(_) => {
             error!("not recognized response {}", reply);
+            error_status = true;
             reply.clear()
         }
         Err(err) => error!("Client failed to receive reply '{}'.", err),
     }
 
     endpoint.shutdown();
+    error_status
 }
 
 fn print_usage(program: &str, opts: Options) {
@@ -90,16 +94,25 @@ fn main() {
         return;
     }
 
+    let mut error_state = false;
     match matches.opt_str("m") {
-        Some(ref mode) if mode == "client" => 
+        Some(ref mode) if mode == "client" => {
+            error_state =
             match matches.opt_str("c") {
                 Some(command) => client(command),
                 None => client(core::server::constants::Commands::ListTasks.to_string())
-            },
+            }
+        },
         Some(ref mode) if mode == "server" => server::server(),
         Some(mode) =>
             println!("mode {}", mode),
         None =>
             print_usage(&program, opts),
     };
+
+    std::process::exit(if error_state {
+        1
+    } else {
+        0
+    });
 }
