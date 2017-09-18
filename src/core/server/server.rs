@@ -46,8 +46,8 @@ fn vec_to_csv<T>(items: Vec<T>) -> Result<String, Box<Error>> where
 }
 
 fn compute_state(state: &State) -> Result<String, String> {
-    let tasks = state.list_tasks()?;
-    match serde_json::to_string(&tasks) {
+    let exp_state = state.get_state()?;
+    match serde_json::to_string(&exp_state) {
         Ok(json) => Ok(json),
         Err(e) => Err(format!("Error serializing state {}", e))
     }

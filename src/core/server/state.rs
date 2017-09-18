@@ -10,6 +10,12 @@ pub struct State {
     database: DB,
 }
 
+#[derive(Serialize)]
+pub struct ExportedState {
+    current_task: Option<Task>,
+    all_tasks: Vec<Task>
+}
+
 fn initialize(database: DB) -> DB {
     let connection = database.establish_connection();
 
@@ -133,5 +139,12 @@ impl State {
             Ok(t) => Ok(t),
             Err(e) => Err(format!("Error while fetching last task switch '{}'", e))
         }
+    }
+
+    pub fn get_state(&self) -> Result<ExportedState, String> {
+        Ok(ExportedState {
+            current_task: self.get_current_task()?,
+            all_tasks: self.list_tasks()?
+        })
     }
 }
