@@ -15,8 +15,9 @@ use csv::Writer;
 use serde;
 use serde_json;
 
-use core::server::state::{State, SystemEventType};
+use core::server::state::State;
 use core::server::constants::Commands;
+use oclock_sqlite::constants::SystemEventType;
 
 extern crate ctrlc;
 use std::sync::atomic::{AtomicBool, Ordering};

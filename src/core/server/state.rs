@@ -1,23 +1,10 @@
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
-use std::fmt;
 
 use oclock_sqlite::connection::DB;
 use oclock_sqlite::models::{NewEvent, NewTask, Task, TimesheetEntry};
 use oclock_sqlite::mappers;
-
-#[derive(Debug)]
-pub enum SystemEventType {
-    Startup,
-    Shutdown,
-    Ping,
-}
-
-impl fmt::Display for SystemEventType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
+use oclock_sqlite::constants::SystemEventType;
 
 pub struct State {
     database: DB,
