@@ -102,6 +102,25 @@ fn handle_msg(msg: &str, state: &State) -> Result<String, String> {
             state.switch_task(task_id)?;
             compute_state(state)
         },
+        Some(m) if m == &Commands::JsonRetroSwitchTask.to_string() => { 
+            let task_id = 
+            match args.get(0) {
+                Some(task_id_str) => Ok(task_id_str.parse::<u64>().unwrap()),
+                None => Err("No task_id parameter found".to_string())
+            }?;
+            let timestamp = 
+            match args.get(1) {
+                Some(task_id_str) => Ok(task_id_str.parse::<u64>().unwrap()),
+                None => Err("No task_id parameter found".to_string())
+            }?;
+            let keep_prev_task = 
+            match args.get(2) {
+                Some(task_id_str) => Ok(task_id_str.parse::<u64>().unwrap() > 0),
+                None => Err("No task_id parameter found".to_string())
+            }?;
+            state.retro_switch_task(task_id as i32, timestamp as i32, keep_prev_task)?;
+            compute_state(state)
+        },
         Some(m) if m == &Commands::JsonState.to_string() => {
             compute_state(state)
         },

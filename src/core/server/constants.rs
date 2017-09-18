@@ -12,6 +12,7 @@ pub enum Commands {
     JsonPushTask,
     JsonDisableTask,
     JsonSwitchTask,
+    JsonRetroSwitchTask,
     JsonState,
     Timesheet,
 }

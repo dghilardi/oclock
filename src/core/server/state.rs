@@ -147,4 +147,43 @@ impl State {
             all_tasks: self.list_tasks()?
         })
     }
+
+    pub fn retro_switch_task(&self, task_id: i32, timestamp: i32, keep_prev_task: bool) -> Result<String, String> {
+        let opt_prev_task =
+        match keep_prev_task {
+            true => self.get_current_task()?,
+            false => None
+        };
+
+        let unix_now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+
+        let connection = self.database.establish_connection();
+
+        let event = NewEvent {
+            event_timestamp: timestamp,
+            task_id: Some(task_id),
+            system_event_name: None,
+        };
+
+        match mappers::events::push_event(&connection, &event) {
+            Ok(evt_id) => Result::Ok(format!("New event id '{}'", evt_id)),
+            Err(err) => Result::Err(format!("Error during task switch '{}'", err)),
+        }?;
+
+        match opt_prev_task {
+            Some(prev_task) => {
+                let redo_prev_task_evt = NewEvent {
+                    event_timestamp: unix_now as i32,
+                    task_id: Some(prev_task.id),
+                    system_event_name: None
+                };
+
+                match mappers::events::push_event(&connection, &redo_prev_task_evt) {
+                    Ok(evt_id) => Result::Ok(format!("New event id '{}'", evt_id)),
+                    Err(err) => Result::Err(format!("Error during task switch '{}'", err)),
+                }
+            },
+            None => Ok("OK".to_string())
+        }
+    }
 }
