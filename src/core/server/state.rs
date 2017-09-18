@@ -1,26 +1,19 @@
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
-use std::fmt;
 
 use oclock_sqlite::connection::DB;
 use oclock_sqlite::models::{NewEvent, NewTask, Task, TimesheetEntry};
 use oclock_sqlite::mappers;
-
-#[derive(Debug)]
-pub enum SystemEventType {
-    Startup,
-    Shutdown,
-    Ping,
-}
-
-impl fmt::Display for SystemEventType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
+use oclock_sqlite::constants::SystemEventType;
 
 pub struct State {
     database: DB,
+}
+
+#[derive(Serialize)]
+pub struct ExportedState {
+    current_task: Option<Task>,
+    all_tasks: Vec<Task>
 }
 
 fn initialize(database: DB) -> DB {
@@ -137,6 +130,60 @@ impl State {
         match mappers::tasks::change_enabled(&connection, id as i32, enabled) {
             Ok(_) => Ok(format!("Task {} enabled: {}", id, enabled)),
             Err(e) => Err(format!("Error switching task enabled flag: '{}'", e))
+        }
+    }
+
+    pub fn get_current_task(&self) -> Result<Option<Task>, String> {
+        let connection = self.database.establish_connection();
+        match mappers::events::current_task(&connection) {
+            Ok(t) => Ok(t),
+            Err(e) => Err(format!("Error while fetching last task switch '{}'", e))
+        }
+    }
+
+    pub fn get_state(&self) -> Result<ExportedState, String> {
+        Ok(ExportedState {
+            current_task: self.get_current_task()?,
+            all_tasks: self.list_tasks()?
+        })
+    }
+
+    pub fn retro_switch_task(&self, task_id: i32, timestamp: i32, keep_prev_task: bool) -> Result<String, String> {
+        let opt_prev_task =
+        match keep_prev_task {
+            true => self.get_current_task()?,
+            false => None
+        };
+
+        let unix_now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+
+        let connection = self.database.establish_connection();
+
+        let event = NewEvent {
+            event_timestamp: timestamp,
+            task_id: Some(task_id),
+            system_event_name: None,
+        };
+
+        match mappers::events::push_event(&connection, &event) {
+            Ok(evt_id) => Result::Ok(format!("New event id '{}'", evt_id)),
+            Err(err) => Result::Err(format!("Error during task switch '{}'", err)),
+        }?;
+
+        match opt_prev_task {
+            Some(prev_task) => {
+                let redo_prev_task_evt = NewEvent {
+                    event_timestamp: unix_now as i32,
+                    task_id: Some(prev_task.id),
+                    system_event_name: None
+                };
+
+                match mappers::events::push_event(&connection, &redo_prev_task_evt) {
+                    Ok(evt_id) => Result::Ok(format!("New event id '{}'", evt_id)),
+                    Err(err) => Result::Err(format!("Error during task switch '{}'", err)),
+                }
+            },
+            None => Ok("OK".to_string())
         }
     }
 }

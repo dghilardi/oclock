@@ -7,10 +7,12 @@ pub enum Commands {
     PushTask,
     DisableTask,
     SwitchTask,
+    CurrentTask,
     ListTasks,
     JsonPushTask,
     JsonDisableTask,
     JsonSwitchTask,
+    JsonRetroSwitchTask,
     JsonState,
     Timesheet,
 }

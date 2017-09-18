@@ -8,6 +8,7 @@
 pub mod schema;
 pub mod models;
 pub mod mappers;
+pub mod constants;
 
 pub mod connection;
 

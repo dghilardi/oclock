@@ -13,6 +13,7 @@ extern crate schedule;
 extern crate csv;
 extern crate serde;
 extern crate serde_json;
+#[macro_use] extern crate serde_derive;
 
 extern crate oclock_sqlite;
 

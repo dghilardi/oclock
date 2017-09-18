@@ -15,8 +15,9 @@ use csv::Writer;
 use serde;
 use serde_json;
 
-use core::server::state::{State, SystemEventType};
+use core::server::state::State;
 use core::server::constants::Commands;
+use oclock_sqlite::constants::SystemEventType;
 
 extern crate ctrlc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -45,8 +46,8 @@ fn vec_to_csv<T>(items: Vec<T>) -> Result<String, Box<Error>> where
 }
 
 fn compute_state(state: &State) -> Result<String, String> {
-    let tasks = state.list_tasks()?;
-    match serde_json::to_string(&tasks) {
+    let exp_state = state.get_state()?;
+    match serde_json::to_string(&exp_state) {
         Ok(json) => Ok(json),
         Err(e) => Err(format!("Error serializing state {}", e))
     }
@@ -57,6 +58,13 @@ fn handle_msg(msg: &str, state: &State) -> Result<String, String> {
     let (command, args) = splitted_cmd.split_at(1);
     match command.first() {
         Some(m) if m == &Commands::Exit.to_string() => Ok(format!("bye bye...")),
+        Some(m) if m == &Commands::CurrentTask.to_string() => {
+            let task = state.get_current_task()?;
+            match task {
+                Some(t) => Ok(t.name),
+                None => Ok("None".to_string())
+            }
+        },
         Some(m) if m == &Commands::ListTasks.to_string() => {
             let tasks = state.list_tasks()?;
             match vec_to_csv(tasks) {
@@ -92,6 +100,25 @@ fn handle_msg(msg: &str, state: &State) -> Result<String, String> {
         Some(m) if m == &Commands::JsonSwitchTask.to_string() => {
             let task_id = args.join(SEP).parse::<u64>().unwrap();
             state.switch_task(task_id)?;
+            compute_state(state)
+        },
+        Some(m) if m == &Commands::JsonRetroSwitchTask.to_string() => { 
+            let task_id = 
+            match args.get(0) {
+                Some(task_id_str) => Ok(task_id_str.parse::<u64>().unwrap()),
+                None => Err("No task_id parameter found".to_string())
+            }?;
+            let timestamp = 
+            match args.get(1) {
+                Some(task_id_str) => Ok(task_id_str.parse::<u64>().unwrap()),
+                None => Err("No task_id parameter found".to_string())
+            }?;
+            let keep_prev_task = 
+            match args.get(2) {
+                Some(task_id_str) => Ok(task_id_str.parse::<u64>().unwrap() > 0),
+                None => Err("No task_id parameter found".to_string())
+            }?;
+            state.retro_switch_task(task_id as i32, timestamp as i32, keep_prev_task)?;
             compute_state(state)
         },
         Some(m) if m == &Commands::JsonState.to_string() => {
