@@ -126,4 +126,12 @@ impl State {
             Err(e) => Err(format!("Error switching task enabled flag: '{}'", e))
         }
     }
+
+    pub fn get_current_task(&self) -> Result<Option<Task>, String> {
+        let connection = self.database.establish_connection();
+        match mappers::events::current_task(&connection) {
+            Ok(t) => Ok(t),
+            Err(e) => Err(format!("Error while fetching last task switch '{}'", e))
+        }
+    }
 }

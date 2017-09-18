@@ -3,7 +3,10 @@ use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use diesel::result::Error;
 
-use models::{Event, NewEvent};
+use models::{Event, NewEvent, Task};
+use constants::SystemEventType;
+
+type Backend = ::diesel::sqlite::Sqlite;
 
 pub fn push_event(conn: &SqliteConnection, task: &NewEvent) -> Result<usize, Error> {
     use schema::events;
@@ -38,4 +41,37 @@ pub fn move_system_event(conn: &SqliteConnection, unix_ts: i32, event_name: Stri
         .set(event_timestamp.eq(unix_ts))
         .execute(conn)
         .expect(&format!("Error updating {} timestamp", event_name));
+}
+
+pub fn current_task(conn: &SqliteConnection) -> Result<Option<Task>, Error> {
+    use schema::events::dsl::*;
+    use schema::tasks::dsl::*;
+    use schema::tasks::dsl::id;
+
+    let last_evt_query = events
+    .filter(
+        system_event_name.ne(SystemEventType::Ping.to_string())
+        .or(system_event_name.is_null())
+    )
+    .order(event_timestamp.desc());
+
+    debug!("Last event query: {}", diesel::debug_query::<Backend, _>(&last_evt_query));
+
+    let last_evt =
+    last_evt_query
+    .first::<Event>(conn);
+
+    debug!("Last event: {:?}", last_evt);
+
+    match last_evt {
+        Ok(Event{task_id: Some(curr_task_id), ..}) => {
+            let task = tasks
+            .filter(id.eq(curr_task_id))
+            .first(conn)?;
+
+            Ok(Some(task))
+            },
+        Ok(Event{task_id: None, ..}) => Ok(None),
+        Err(e) => Err(e)
+    }
 }

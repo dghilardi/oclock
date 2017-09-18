@@ -58,6 +58,13 @@ fn handle_msg(msg: &str, state: &State) -> Result<String, String> {
     let (command, args) = splitted_cmd.split_at(1);
     match command.first() {
         Some(m) if m == &Commands::Exit.to_string() => Ok(format!("bye bye...")),
+        Some(m) if m == &Commands::CurrentTask.to_string() => {
+            let task = state.get_current_task()?;
+            match task {
+                Some(t) => Ok(t.name),
+                None => Ok("None".to_string())
+            }
+        },
         Some(m) if m == &Commands::ListTasks.to_string() => {
             let tasks = state.list_tasks()?;
             match vec_to_csv(tasks) {
