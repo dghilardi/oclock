@@ -1,6 +1,6 @@
 [package]
 name = "oclock"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Davide Ghilardi <ghilardi.davide@gmail.com>"]
 
 [dependencies]
@@ -12,6 +12,7 @@ nanomsg = "0.6.2"
 getopts = "0.2"
 
 schedule = "0.1.0"
+itertools = "0.6"
 
 csv = "1.0.0-beta.4"
 serde = "1.0"

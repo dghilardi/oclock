@@ -22,6 +22,8 @@ table! {
         id -> Integer,
         day -> Text,
         task_name -> Nullable<Text>,
+        task_id -> Nullable<Integer>,
+        system_event -> Nullable<Text>,
         amount -> Integer,
     }
 }
