@@ -15,6 +15,8 @@ extern crate serde;
 extern crate serde_json;
 #[macro_use] extern crate serde_derive;
 
+extern crate itertools;
+
 extern crate oclock_sqlite;
 
 use getopts::Options;

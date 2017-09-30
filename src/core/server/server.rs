@@ -15,7 +15,7 @@ use csv::Writer;
 use serde;
 use serde_json;
 
-use core::server::state::State;
+use core::server::state::{State, TimesheetPivotRecord};
 use core::server::constants::Commands;
 use oclock_sqlite::constants::SystemEventType;
 
@@ -39,6 +39,22 @@ fn vec_to_csv<T>(items: Vec<T>) -> Result<String, Box<Error>> where
     let mut wtr = Writer::from_writer(vec![]);
     for item in items {
         wtr.serialize(item);
+    }
+
+    let data = String::from_utf8(wtr.into_inner()?)?;
+    Ok(data)
+}
+
+fn timesheet_to_csv(tasks: Vec<String>, records: Vec<TimesheetPivotRecord>) -> Result<String, Box<Error>> {
+    let mut wtr = Writer::from_writer(vec![]);
+    wtr.serialize(("day", tasks));
+    for item in records {
+        let entries_str: Vec<String> = item.entries.iter()
+            .map(|e| 
+                format!("{:02}:{:02}:{:02}", e/3600, (e-(e/3600)*3600)/60, e-(e/60)*60)
+            )
+            .collect();
+        wtr.serialize((item.day, entries_str));
     }
 
     let data = String::from_utf8(wtr.into_inner()?)?;
@@ -73,8 +89,9 @@ fn handle_msg(msg: &str, state: &State) -> Result<String, String> {
             }
         },
         Some(m) if m == &Commands::Timesheet.to_string() => {
-            let timesheet = state.full_timesheet()?;
-            match vec_to_csv(timesheet) {
+            let (tasks, timesheet) = state.full_timesheet()?;
+
+            match timesheet_to_csv(tasks, timesheet) {
                 Ok(csv) => Ok(csv),
                 Err(e) => Err(format!("Error generating csv '{}'", e)),
             }

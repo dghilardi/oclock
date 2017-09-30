@@ -1,6 +1,8 @@
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
+use itertools::Itertools;
+
 use oclock_sqlite::connection::DB;
 use oclock_sqlite::models::{NewEvent, NewTask, Task, TimesheetEntry};
 use oclock_sqlite::mappers;
@@ -14,6 +16,12 @@ pub struct State {
 pub struct ExportedState {
     current_task: Option<Task>,
     all_tasks: Vec<Task>
+}
+
+#[derive(Serialize)]
+pub struct TimesheetPivotRecord {
+    pub day: String,
+    pub entries: Vec<i32>,
 }
 
 fn initialize(database: DB) -> DB {
@@ -117,10 +125,54 @@ impl State {
         }
     }
 
-    pub fn full_timesheet(&self) -> Result<Vec<TimesheetEntry>, String> {
+    pub fn full_timesheet(&self) -> Result<(Vec<String>,Vec<TimesheetPivotRecord>), String> {
         let connection = self.database.establish_connection();
         match mappers::timesheet::full_timesheet(&connection) {
-            Ok(v) => Ok(v),
+            Ok(v) => {
+                let mut timesheet_tasks : Vec<Option<i32>> =
+                v.iter()
+                .map(|vi| vi.task_id)
+                .collect()
+                ;
+
+                timesheet_tasks.sort();
+                timesheet_tasks.dedup();
+
+                let res =
+                (&v).into_iter()
+                .group_by(|vi| vi.day.clone())
+                .into_iter()
+                .map(|(day, records)| {
+                    let day_tasks: Vec<&TimesheetEntry> = records.collect();
+
+                    TimesheetPivotRecord {
+                        day: day,
+                        entries: timesheet_tasks
+                            .iter()
+                            .map(|ref task_id| 
+                                match day_tasks.iter().find(|&r| r.task_id == task_id.clone().clone()) {
+                                    Some(record) => record.amount,
+                                    None => 0
+                                }
+                            )
+                            .collect()
+                    }
+                })
+                .collect()
+                ;
+
+                let task_names: Vec<String> = timesheet_tasks
+                    .iter()
+                    .map(|ref task_name| 
+                        match v.iter().find(|&r| &&r.task_id == task_name) {
+                            Some(&TimesheetEntry { task_name: Some(ref task_name), .. }) => format!("{}", task_name),
+                            _ => "NONE".to_string()
+                        }
+                    )
+                    .collect();
+
+                Ok((task_names, res))
+            },
             Err(e) => Err(format!("Error generating timesheet: '{}'", e))
         }
     }
