@@ -45,13 +45,27 @@ fn vec_to_csv<T>(items: Vec<T>) -> Result<String, Box<Error>> where
     Ok(data)
 }
 
+#[test]
+fn test_time_format() {
+    assert_eq!(format_time_interval(&0), "00:00:00");
+    assert_eq!(format_time_interval(&1), "00:00:01");
+    assert_eq!(format_time_interval(&60), "00:01:00");
+    assert_eq!(format_time_interval(&3600), "01:00:00");
+    
+    assert_eq!(format_time_interval(&45296), "12:34:56");
+}
+
+fn format_time_interval(i: &i32) -> String {
+    format!("{:02}:{:02}:{:02}", i/3600, (i-(i/3600)*3600)/60, i-(i/60)*60)
+}
+
 fn timesheet_to_csv(tasks: Vec<String>, records: Vec<TimesheetPivotRecord>) -> Result<String, Box<Error>> {
     let mut wtr = Writer::from_writer(vec![]);
     wtr.serialize(("day", tasks));
     for item in records {
         let entries_str: Vec<String> = item.entries.iter()
             .map(|e| 
-                format!("{:02}:{:02}:{:02}", e/3600, (e-(e/3600)*3600)/60, e-(e/60)*60)
+                format_time_interval(e)
             )
             .collect();
         wtr.serialize((item.day, entries_str));
