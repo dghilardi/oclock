@@ -12,14 +12,14 @@ nanomsg = "0.7"
 getopts = "0.2"
 
 schedule = "0.1"
-itertools = "0.6"
+itertools = "0.10"
 
-csv = "1.0.0-beta"
+csv = "1.1"
 serde = "1.0"
 serde_json = "1.0"
 serde_derive = "1.0"
 
-ctrlc = { version = "3.0", features = ["termination"] }
+ctrlc = { version = "3.1", features = ["termination"] }
 
 [dependencies.oclock_sqlite]
 path = "libs/oclock_sqlite"
