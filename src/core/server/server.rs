@@ -21,7 +21,8 @@ use oclock_sqlite::constants::SystemEventType;
 
 extern crate ctrlc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, mpsc};
+use std::sync::mpsc::{Sender, Receiver, TryRecvError};
 
 pub const SERVER_URL: &'static str = "ipc:///tmp/time-monitor.ipc";
 
@@ -218,6 +219,7 @@ fn nanomsg_listen(socket: &mut Socket, state: &State) -> MsgListenerStatus {
 pub fn server() {
     let mut nanomsg_socket = Socket::new(Protocol::Rep).unwrap();
     let mut nanomsg_endpoint = nanomsg_socket.bind(SERVER_URL).unwrap();
+    let (command_tx, command_rx): (Sender<MsgListenerStatus>, Receiver<MsgListenerStatus>) = mpsc::channel();
 
     let cfg_path = 
     match env::var("HOME") {
@@ -233,12 +235,12 @@ pub fn server() {
     state.system_event(SystemEventType::Startup);
     state.system_event(SystemEventType::Ping);
 
-    let mut daemon_status = MsgListenerStatus::Continue;
     let mut a = Agenda::new();
 
     // Run every second
     a.add(Job::new(|| {
-        daemon_status = nanomsg_listen(&mut nanomsg_socket, &state);
+        let daemon_status = nanomsg_listen(&mut nanomsg_socket, &state);
+        command_tx.send(daemon_status);
     }, "* * * * * *".parse().unwrap()));
 
     // Run every minute
@@ -256,8 +258,9 @@ pub fn server() {
     loop {
         a.run_pending();
 
-        match daemon_status {
-            MsgListenerStatus::Continue => (),
+        match command_rx.try_recv() {
+            Ok(MsgListenerStatus::Continue) => (),
+            Err(TryRecvError::Empty) => (),
             _ => break,
         }
 
