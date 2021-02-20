@@ -4,9 +4,9 @@ version = 3
 
 [[package]]
 name = "Inflector"
-version = "0.10.1"
+version = "0.11.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f1e2672377de83c6b6d07d76e14a361f37b2e9449085aee30711143fbd25792"
+checksum = "fe438c63458706e03479442743baae6c88256498e6431708f6dfc520a26515d3"
 
 [[package]]
 name = "aho-corasick"
@@ -283,9 +283,9 @@ dependencies = [
 
 [[package]]
 name = "nanomsg"
-version = "0.6.2"
+version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76ccf9e51352fe07b21a15056877f9058fb7b471aeae03f9249e7f7134147713"
+checksum = "617e0160fba522f8667df7bc79f3b4a74a0e3968d08023ebb3ce717a5f3bd3ac"
 dependencies = [
  "libc",
  "nanomsg-sys",
@@ -293,9 +293,9 @@ dependencies = [
 
 [[package]]
 name = "nanomsg-sys"
-version = "0.6.2"
+version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1c99d8b346eb279bcb61913440b558073ea1f1cc8c51adcf0efe90f690d2c5a"
+checksum = "78aa3ccb6d007dfecb4f7070725c4b1670a87677babb6621cb0c8cce9cfdc004"
 dependencies = [
  "cmake",
  "gcc",
