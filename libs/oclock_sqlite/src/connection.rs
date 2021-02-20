@@ -2,7 +2,7 @@ use diesel::Connection;
 use diesel::sqlite::SqliteConnection;
 use diesel::prelude::*;
 use diesel::expression::sql_literal::sql;
-use diesel::types::*;
+use diesel::sql_types::*;
 
 embed_migrations!();
 
@@ -28,7 +28,7 @@ impl DB {
             .expect(&format!("Error connecting to database at {}", self.connection_string));
 
         // Integer is a dummy placeholder. Compiling fails when passing ().
-        sql::<(Integer)>("PRAGMA foreign_keys = ON")
+        sql::<Integer>("PRAGMA foreign_keys = ON")
             .execute(&connection)
             .expect("Should be able to enable foreign_keys");
 

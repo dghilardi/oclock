@@ -34,7 +34,7 @@ enum MsgListenerStatus {
     Fail
 }
 
-fn vec_to_csv<T>(items: Vec<T>) -> Result<String, Box<Error>> where
+fn vec_to_csv<T>(items: Vec<T>) -> Result<String, Box<dyn Error>> where
     T: serde::ser::Serialize
 {
     let mut wtr = Writer::from_writer(vec![]);
@@ -60,7 +60,7 @@ fn format_time_interval(i: &i32) -> String {
     format!("{:02}:{:02}:{:02}", i/3600, (i-(i/3600)*3600)/60, i-(i/60)*60)
 }
 
-fn timesheet_to_csv(tasks: Vec<String>, records: Vec<TimesheetPivotRecord>) -> Result<String, Box<Error>> {
+fn timesheet_to_csv(tasks: Vec<String>, records: Vec<TimesheetPivotRecord>) -> Result<String, Box<dyn Error>> {
     let mut wtr = Writer::from_writer(vec![]);
     wtr.serialize(("day", tasks));
     for item in records {

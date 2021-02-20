@@ -8,8 +8,8 @@ use models::{Task, NewTask};
 pub fn create_task(conn: &SqliteConnection, task: &NewTask) -> Result<usize, Error> {
     use schema::tasks;
 
-    diesel::insert(task)
-        .into(tasks::table)
+    diesel::insert_into(tasks::table)
+        .values(task)
         .execute(conn)
 }
 

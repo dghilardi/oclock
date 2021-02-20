@@ -11,8 +11,8 @@ type Backend = ::diesel::sqlite::Sqlite;
 pub fn push_event(conn: &SqliteConnection, task: &NewEvent) -> Result<usize, Error> {
     use schema::events;
 
-    diesel::insert(task)
-        .into(events::table)
+    diesel::insert_into(events::table)
+        .values(task)
         .execute(conn)
 }
 

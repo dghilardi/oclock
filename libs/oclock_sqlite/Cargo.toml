@@ -6,8 +6,8 @@ authors = ["Davide Ghilardi <ghilardi.davide@gmail.com>"]
 [dependencies]
 log = "0.3"
 
-diesel = { version = "0.16", features = ["sqlite"] }
-diesel_codegen = { version = "0.16", features = ["sqlite"] }
+diesel = { version = "1.4", features = ["sqlite"] }
+diesel_migrations = { version = "1.4", features = ["sqlite"] }
 
 serde = "1.0"
 serde_derive = "1.0"
