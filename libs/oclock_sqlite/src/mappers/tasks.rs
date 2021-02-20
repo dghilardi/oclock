@@ -3,10 +3,10 @@ use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use diesel::result::Error;
 
-use models::{Task, NewTask};
+use crate::models::{Task, NewTask};
 
 pub fn create_task(conn: &SqliteConnection, task: &NewTask) -> Result<usize, Error> {
-    use schema::tasks;
+    use crate::schema::tasks;
 
     diesel::insert_into(tasks::table)
         .values(task)
@@ -14,7 +14,7 @@ pub fn create_task(conn: &SqliteConnection, task: &NewTask) -> Result<usize, Err
 }
 
 pub fn list_tasks(conn: &SqliteConnection) -> Result<Vec<Task>, Error> {
-    use schema::tasks::dsl::*;
+    use crate::schema::tasks::dsl::*;
 
     tasks
     .order(id)
@@ -22,7 +22,7 @@ pub fn list_tasks(conn: &SqliteConnection) -> Result<Vec<Task>, Error> {
 }
 
 pub fn change_enabled(conn: &SqliteConnection, task_id: i32, new_enabled: bool) -> Result<usize, Error> {
-    use schema::tasks::dsl::*;
+    use crate::schema::tasks::dsl::*;
 
     diesel::update(tasks.filter(id.eq(&task_id)))
         .set(enabled.eq(if new_enabled {1} else {0}))

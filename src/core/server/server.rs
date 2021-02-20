@@ -15,8 +15,8 @@ use csv::Writer;
 use serde;
 use serde_json;
 
-use core::server::state::{State, TimesheetPivotRecord};
-use core::server::constants::Commands;
+use crate::core::server::state::{State, TimesheetPivotRecord};
+use crate::core::server::constants::Commands;
 use oclock_sqlite::constants::SystemEventType;
 
 extern crate ctrlc;

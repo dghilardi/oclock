@@ -27,7 +27,7 @@ use std::io::{Read, Write};
 
 mod core;
 
-use core::server::server;
+use crate::core::server::server;
 
 fn client(request: String) -> bool {
     let mut socket = Socket::new(Protocol::Req).unwrap();
