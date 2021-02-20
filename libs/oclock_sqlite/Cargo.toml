@@ -4,7 +4,7 @@ version = "0.1.4"
 authors = ["Davide Ghilardi <ghilardi.davide@gmail.com>"]
 
 [dependencies]
-log = "0.3"
+log = "0.4"
 
 diesel = { version = "1.4", features = ["sqlite"] }
 diesel_migrations = { version = "1.4", features = ["sqlite"] }
