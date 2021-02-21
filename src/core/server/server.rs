@@ -1,6 +1,8 @@
 use nng;
 use nng::{Socket, Protocol};
 
+use log::{error, debug};
+
 use std::str;
 use std::env;
 use std::fs;
@@ -10,7 +12,6 @@ use std::error::Error;
 
 use schedule::{Agenda, Job};
 
-use std::io::{Write};
 use csv::Writer;
 use serde;
 use serde_json;

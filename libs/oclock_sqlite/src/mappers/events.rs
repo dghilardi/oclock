@@ -3,6 +3,8 @@ use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use diesel::result::Error;
 
+use log::debug;
+
 use crate::models::{Event, NewEvent, Task};
 use crate::constants::SystemEventType;
 

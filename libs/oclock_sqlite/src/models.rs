@@ -1,5 +1,6 @@
 use super::schema::*;
 
+use serde::Serialize;
 
 #[derive(Insertable)]
 #[table_name="tasks"]

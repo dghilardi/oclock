@@ -1,36 +1,15 @@
-#![allow(unused_must_use)]
-
-extern crate inflector;
-extern crate getopts;
-
-#[macro_use]
-extern crate log;
-extern crate env_logger;
-
-extern crate schedule;
-
-extern crate csv;
-extern crate serde;
-extern crate serde_json;
-#[macro_use] extern crate serde_derive;
-
-extern crate itertools;
-
-extern crate oclock_sqlite;
-
 use getopts::Options;
 
 use nng::{Socket, Protocol};
 
-use std::io::{Read, Write};
+use log::{error, debug};
 
 mod core;
 
 use crate::core::server::server;
-use std::error::Error;
 
 fn client(request: String) -> bool {
-    let mut socket = Socket::new(Protocol::Req0).unwrap();
+    let socket = Socket::new(Protocol::Req0).unwrap();
     socket.dial(server::SERVER_URL).unwrap();
 
     let mut error_status = false;
