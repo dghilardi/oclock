@@ -1,5 +1,5 @@
-use nanomsg;
-use nanomsg::{Socket, Protocol};
+use nng;
+use nng::{Socket, Protocol};
 
 use std::str;
 use std::env;
@@ -168,18 +168,17 @@ fn handle_msg(msg: &str, state: &State) -> Result<String, String> {
 }
 
 fn nanomsg_listen(socket: &mut Socket, state: &State) -> MsgListenerStatus {
-    let mut buffer = Vec::new();
-
-    match socket.nb_read_to_end(&mut buffer) {
-        Ok(_) => {
-            let status = match str::from_utf8(buffer.as_slice()) {
+    match socket.recv() {
+        Ok(message) => {
+            let message_str = str::from_utf8(&message);
+            let status = match message_str {
                 Ok(msg) if msg == "EXIT" => MsgListenerStatus::Terminate,
                 Ok(_) => MsgListenerStatus::Continue,
                 Err(_) => MsgListenerStatus::Fail,
             };
 
             let cmd_outcome =
-            match str::from_utf8(buffer.as_slice()) {
+            match message_str {
                 Ok(msg) => handle_msg(msg, state),
                 Err(e) => {
                     error!("Invalid UTF-8 sequence: {}", e);
@@ -193,18 +192,16 @@ fn nanomsg_listen(socket: &mut Socket, state: &State) -> MsgListenerStatus {
                 Err(msg) => format!("ERR#{}", msg),
             };
 
-            match socket.write_all(reply.as_bytes()) {
+            match socket.send(reply.as_bytes()) {
                 Ok(..) => println!("Sent '{}'.", reply),
                 Err(err) => {
-                    error!("Server failed to send reply '{}'.", err)
+                    error!("Server failed to send reply '{:?}'.", err)
                 }
             };
 
-            buffer.clear();
-
             status
         },
-        Err(nanomsg::Error::TryAgain) => {
+        Err(nng::Error::TryAgain) => {
             debug!("No message received");
             MsgListenerStatus::Continue
         },
@@ -217,8 +214,8 @@ fn nanomsg_listen(socket: &mut Socket, state: &State) -> MsgListenerStatus {
 }
 
 pub fn server() {
-    let mut nanomsg_socket = Socket::new(Protocol::Rep).unwrap();
-    let mut nanomsg_endpoint = nanomsg_socket.bind(SERVER_URL).unwrap();
+    let mut nanomsg_socket = Socket::new(Protocol::Rep0).unwrap();
+    nanomsg_socket.listen(SERVER_URL).unwrap();
     let (command_tx, command_rx): (Sender<MsgListenerStatus>, Receiver<MsgListenerStatus>) = mpsc::channel();
 
     let cfg_path = 
@@ -274,5 +271,4 @@ pub fn server() {
     println!("Shutting down");
 
     state.system_event(SystemEventType::Shutdown);
-    nanomsg_endpoint.shutdown();
 }

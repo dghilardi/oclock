@@ -179,12 +179,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gcc"
-version = "0.3.55"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f5f3913fa0bfe7ee1fd8248b6b9f42a5af4b9d65ec2dd2c3c26132b950ecfc2"
-
-[[package]]
 name = "getopts"
 version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -282,28 +276,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nanomsg"
-version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "617e0160fba522f8667df7bc79f3b4a74a0e3968d08023ebb3ce717a5f3bd3ac"
-dependencies = [
- "libc",
- "nanomsg-sys",
-]
-
-[[package]]
-name = "nanomsg-sys"
-version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78aa3ccb6d007dfecb4f7070725c4b1670a87677babb6621cb0c8cce9cfdc004"
-dependencies = [
- "cmake",
- "gcc",
- "libc",
- "pkg-config",
-]
-
-[[package]]
 name = "nix"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -313,6 +285,25 @@ dependencies = [
  "cc",
  "cfg-if 0.1.10",
  "libc",
+]
+
+[[package]]
+name = "nng"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b33705908296af2b9f88498eb6f22f1b4c9821a540c6c31fb5a70117477c426"
+dependencies = [
+ "log",
+ "nng-sys",
+]
+
+[[package]]
+name = "nng-sys"
+version = "1.1.1-rc.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "219ff181fe150cb705cc47d64c726576d34f058c024e89bcebeed2a8793ae371"
+dependencies = [
+ "cmake",
 ]
 
 [[package]]
@@ -373,7 +364,7 @@ dependencies = [
  "getopts",
  "itertools",
  "log",
- "nanomsg",
+ "nng",
  "oclock_sqlite",
  "schedule",
  "serde",

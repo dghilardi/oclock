@@ -1,7 +1,6 @@
 #![allow(unused_must_use)]
 
 extern crate inflector;
-extern crate nanomsg;
 extern crate getopts;
 
 #[macro_use]
@@ -21,53 +20,54 @@ extern crate oclock_sqlite;
 
 use getopts::Options;
 
-use nanomsg::{Socket, Protocol};
+use nng::{Socket, Protocol};
 
 use std::io::{Read, Write};
 
 mod core;
 
 use crate::core::server::server;
+use std::error::Error;
 
 fn client(request: String) -> bool {
-    let mut socket = Socket::new(Protocol::Req).unwrap();
-    let mut endpoint = socket.connect(server::SERVER_URL).unwrap();
+    let mut socket = Socket::new(Protocol::Req0).unwrap();
+    socket.dial(server::SERVER_URL).unwrap();
 
-    let mut reply = String::new();
     let mut error_status = false;
 
-    match socket.write_all(request.as_bytes()) {
+    match socket.send(request.as_bytes()) {
         Ok(..) => debug!("Send '{}'.", request),
-        Err(err) => error!("Client failed to send request '{}'.", err)
+        Err(err) => error!("Client failed to send request '{:?}'.", err)
     }
 
-    match socket.read_to_string(&mut reply) {
-        Ok(_) if reply.starts_with("OK#") => {
-            debug!("Recv '{}'.", reply);
+    match socket.recv() {
+        Ok(reply) if reply.starts_with(b"OK#") => {
+            debug!("Recv '{:?}'.", reply);
 
-            let msg = reply.replace("OK#","");
+            let msg = std::str::from_utf8(&reply)
+                .expect("Error deserializing response")
+                .replace("OK#","");
 
             println!("{}", msg);
-            reply.clear()
         },
-        Ok(_) if reply.starts_with("ERR#") => {
-            debug!("Recv '{}'.", reply);
+        Ok(reply) if reply.starts_with(b"ERR#") => {
+            debug!("Recv '{:?}'.", reply);
 
-            let msg = reply.replace("ERR#","");
+            let msg = std::str::from_utf8(&reply)
+                .expect("Error deserializing response")
+                .replace("ERR#","");
 
             eprintln!("{}", msg);
             error_status = true;
-            reply.clear()
         },
-        Ok(_) => {
-            error!("not recognized response {}", reply);
+        Ok(reply) => {
+            error!("not recognized response {:?}", reply);
             error_status = true;
-            reply.clear()
         }
         Err(err) => error!("Client failed to receive reply '{}'.", err),
     }
 
-    endpoint.shutdown();
+    socket.close();
     error_status
 }
 
