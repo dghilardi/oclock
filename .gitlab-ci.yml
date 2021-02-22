@@ -14,7 +14,7 @@ image: "rust:1.50"
 # You will often need this when you (or any of your dependencies) depends on C code.
 before_script:
   - apt-get update -yqq
-  - apt-get install -yqq --no-install-recommends build-essential libnanomsg-dev
+  - apt-get install -yqq --no-install-recommends build-essential cmake
 
 # Use cargo to test the project
 test:cargo:
