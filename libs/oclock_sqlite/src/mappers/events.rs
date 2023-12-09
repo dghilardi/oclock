@@ -10,7 +10,7 @@ use crate::constants::SystemEventType;
 
 type Backend = ::diesel::sqlite::Sqlite;
 
-pub fn push_event(conn: &SqliteConnection, task: &NewEvent) -> Result<usize, Error> {
+pub fn push_event(conn: &mut SqliteConnection, task: &NewEvent) -> Result<usize, Error> {
     use crate::schema::events;
 
     diesel::insert_into(events::table)
@@ -18,7 +18,7 @@ pub fn push_event(conn: &SqliteConnection, task: &NewEvent) -> Result<usize, Err
         .execute(conn)
 }
 
-pub fn get_last_event(conn: &SqliteConnection) -> Result<Event, Error> {
+pub fn get_last_event(conn: &mut SqliteConnection) -> Result<Event, Error> {
     use crate::schema::events::dsl::*;
 
     events
@@ -26,7 +26,7 @@ pub fn get_last_event(conn: &SqliteConnection) -> Result<Event, Error> {
     .first(conn)
 }
 
-pub fn remove_all_system_events(conn: &SqliteConnection, event_name: String) {
+pub fn remove_all_system_events(conn: &mut SqliteConnection, event_name: String) {
     use crate::schema::events::dsl::*;
 
     let num_deleted = diesel::delete(events.filter(system_event_name.eq(&event_name)))
@@ -36,7 +36,7 @@ pub fn remove_all_system_events(conn: &SqliteConnection, event_name: String) {
     debug!("deleted {} system events with type {}", num_deleted, event_name);
 }
 
-pub fn move_system_event(conn: &SqliteConnection, unix_ts: i32, event_name: String) {
+pub fn move_system_event(conn: &mut SqliteConnection, unix_ts: i32, event_name: String) {
     use crate::schema::events::dsl::*;
 
     diesel::update(events.filter(system_event_name.eq(&event_name)))
@@ -45,7 +45,7 @@ pub fn move_system_event(conn: &SqliteConnection, unix_ts: i32, event_name: Stri
         .expect(&format!("Error updating {} timestamp", event_name));
 }
 
-pub fn current_task(conn: &SqliteConnection) -> Result<Option<Task>, Error> {
+pub fn current_task(conn: &mut SqliteConnection) -> Result<Option<Task>, Error> {
     use crate::schema::events::dsl::*;
     use crate::schema::tasks::dsl::*;
     use crate::schema::tasks::dsl::id;

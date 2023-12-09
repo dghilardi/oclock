@@ -5,7 +5,7 @@ use diesel::result::Error;
 
 use crate::models::{Task, NewTask};
 
-pub fn create_task(conn: &SqliteConnection, task: &NewTask) -> Result<usize, Error> {
+pub fn create_task(conn: &mut SqliteConnection, task: &NewTask) -> Result<usize, Error> {
     use crate::schema::tasks;
 
     diesel::insert_into(tasks::table)
@@ -13,7 +13,7 @@ pub fn create_task(conn: &SqliteConnection, task: &NewTask) -> Result<usize, Err
         .execute(conn)
 }
 
-pub fn list_tasks(conn: &SqliteConnection) -> Result<Vec<Task>, Error> {
+pub fn list_tasks(conn: &mut SqliteConnection) -> Result<Vec<Task>, Error> {
     use crate::schema::tasks::dsl::*;
 
     tasks
@@ -21,7 +21,7 @@ pub fn list_tasks(conn: &SqliteConnection) -> Result<Vec<Task>, Error> {
     .load(conn)
 }
 
-pub fn change_enabled(conn: &SqliteConnection, task_id: i32, new_enabled: bool) -> Result<usize, Error> {
+pub fn change_enabled(conn: &mut SqliteConnection, task_id: i32, new_enabled: bool) -> Result<usize, Error> {
     use crate::schema::tasks::dsl::*;
 
     diesel::update(tasks.filter(id.eq(&task_id)))

@@ -28,9 +28,9 @@ pub struct TimesheetPivotRecord {
 }
 
 fn initialize(database: DB) -> DB {
-    let connection = database.establish_connection();
+    let mut connection = database.establish_connection();
 
-    match mappers::events::get_last_event(&connection) {
+    match mappers::events::get_last_event(&mut connection) {
         Ok(last_event) =>
             match last_event.system_event_name {
                 Some(ref sys_evt) if sys_evt == &SystemEventType::Shutdown.to_string() =>
@@ -46,13 +46,13 @@ fn initialize(database: DB) -> DB {
                         system_event_name: Some(SystemEventType::Shutdown.to_string()),
                     };
 
-                    mappers::events::push_event(&connection, &event);
+                    mappers::events::push_event(&mut connection, &event);
                 }
             },
         Err(e) => 
             debug!("Error: {:?}", e)
     }
-    mappers::events::remove_all_system_events(&connection, SystemEventType::Ping.to_string());
+    mappers::events::remove_all_system_events(&mut connection, SystemEventType::Ping.to_string());
 
     database
 }
@@ -71,9 +71,9 @@ impl State {
             name: name
         };
 
-        let connection = self.database.establish_connection();
+        let mut connection = self.database.establish_connection();
 
-        match mappers::tasks::create_task(&connection, &new_task) {
+        match mappers::tasks::create_task(&mut connection, &new_task) {
             Ok(task_id) => Result::Ok(format!("New task id '{}'", task_id)),
             Err(err) => Result::Err(format!("Error during task insert '{}'", err)),
         }
@@ -82,7 +82,7 @@ impl State {
     pub fn switch_task(&self, id: u64) -> Result<String, String> {
         let unix_now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
-        let connection = self.database.establish_connection();
+        let mut connection = self.database.establish_connection();
 
         let event = NewEvent {
             event_timestamp: unix_now as i32,
@@ -90,7 +90,7 @@ impl State {
             system_event_name: None,
         };
 
-        match mappers::events::push_event(&connection, &event) {
+        match mappers::events::push_event(&mut connection, &event) {
             Ok(evt_id) => Result::Ok(format!("New event id '{}'", evt_id)),
             Err(err) => Result::Err(format!("Error during task switch '{}'", err)),
         }
@@ -99,7 +99,7 @@ impl State {
     pub fn system_event(&self, evt: SystemEventType) -> Result<String, String> {
         let unix_now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
-        let connection = self.database.establish_connection();
+        let mut connection = self.database.establish_connection();
 
         let event = NewEvent {
             event_timestamp: unix_now as i32,
@@ -107,7 +107,7 @@ impl State {
             system_event_name: Some(evt.to_string()),
         };
 
-        match mappers::events::push_event(&connection, &event) {
+        match mappers::events::push_event(&mut connection, &event) {
             Ok(evt_id) => Result::Ok(format!("New event id '{}'", evt_id)),
             Err(err) => Result::Err(format!("Error inserting system event '{}'", err)),
         }
@@ -115,22 +115,22 @@ impl State {
 
     pub fn ping(&self) {
         let unix_now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
-        let connection = self.database.establish_connection();
+        let mut connection = self.database.establish_connection();
 
-        mappers::events::move_system_event(&connection, unix_now as i32, SystemEventType::Ping.to_string())
+        mappers::events::move_system_event(&mut connection, unix_now as i32, SystemEventType::Ping.to_string())
     }
 
     pub fn list_tasks(&self) -> Result<Vec<Task>, String> {
-        let connection = self.database.establish_connection();
-        match mappers::tasks::list_tasks(&connection) {
+        let mut connection = self.database.establish_connection();
+        match mappers::tasks::list_tasks(&mut connection) {
             Ok(v) => Ok(v),
             Err(e) => Err(format!("Error retrieving tasks list: '{}'", e))
         }
     }
 
     pub fn full_timesheet(&self) -> Result<(Vec<String>,Vec<TimesheetPivotRecord>), String> {
-        let connection = self.database.establish_connection();
-        match mappers::timesheet::full_timesheet(&connection) {
+        let mut connection = self.database.establish_connection();
+        match mappers::timesheet::full_timesheet(&mut connection) {
             Ok(v) => {
                 let mut timesheet_tasks : Vec<Option<i32>> =
                 v.iter()
@@ -181,16 +181,16 @@ impl State {
     }
 
     pub fn change_task_enabled_flag(&self, id: u64, enabled: bool) -> Result<String, String> {
-        let connection = self.database.establish_connection();
-        match mappers::tasks::change_enabled(&connection, id as i32, enabled) {
+        let mut connection = self.database.establish_connection();
+        match mappers::tasks::change_enabled(&mut connection, id as i32, enabled) {
             Ok(_) => Ok(format!("Task {} enabled: {}", id, enabled)),
             Err(e) => Err(format!("Error switching task enabled flag: '{}'", e))
         }
     }
 
     pub fn get_current_task(&self) -> Result<Option<Task>, String> {
-        let connection = self.database.establish_connection();
-        match mappers::events::current_task(&connection) {
+        let mut connection = self.database.establish_connection();
+        match mappers::events::current_task(&mut connection) {
             Ok(t) => Ok(t),
             Err(e) => Err(format!("Error while fetching last task switch '{}'", e))
         }
@@ -212,7 +212,7 @@ impl State {
 
         let unix_now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
-        let connection = self.database.establish_connection();
+        let mut connection = self.database.establish_connection();
 
         let event = NewEvent {
             event_timestamp: timestamp,
@@ -220,7 +220,7 @@ impl State {
             system_event_name: None,
         };
 
-        match mappers::events::push_event(&connection, &event) {
+        match mappers::events::push_event(&mut connection, &event) {
             Ok(evt_id) => Result::Ok(format!("New event id '{}'", evt_id)),
             Err(err) => Result::Err(format!("Error during task switch '{}'", err)),
         }?;
@@ -233,7 +233,7 @@ impl State {
                     system_event_name: None
                 };
 
-                match mappers::events::push_event(&connection, &redo_prev_task_evt) {
+                match mappers::events::push_event(&mut connection, &redo_prev_task_evt) {
                     Ok(evt_id) => Result::Ok(format!("New event id '{}'", evt_id)),
                     Err(err) => Result::Err(format!("Error during task switch '{}'", err)),
                 }

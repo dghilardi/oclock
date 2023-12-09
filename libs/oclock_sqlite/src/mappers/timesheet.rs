@@ -5,7 +5,7 @@ use diesel::result::Error;
 use crate::models::{TimesheetEntry};
 use crate::constants::SystemEventType;
 
-pub fn full_timesheet(conn: &SqliteConnection) -> Result<Vec<TimesheetEntry>, Error> {
+pub fn full_timesheet(conn: &mut SqliteConnection) -> Result<Vec<TimesheetEntry>, Error> {
     use crate::schema::v_timesheet::dsl::*;
 
     v_timesheet
