@@ -2,7 +2,13 @@
 edition = "2021"
 name = "oclock"
 version = "0.1.4"
-authors = ["Davide Ghilardi <ghilardi.davide@gmail.com>"]
+
+authors = ["Davide Ghilardi <dghila@d71.dev>"]
+description = "Time tracking utility"
+keywords = [ "time-tracking", "daemon", "utility" ]
+repository = "https://github.com/dghilardi/oclock"
+license = "GPL-3.0-or-later"
+readme = "README.md"
 
 [dependencies]
 log = "0.4"
