@@ -27,33 +27,43 @@ pub struct ClientArgs {
 
 #[derive(Subcommand, Debug)]
 pub enum OClockClientCommand {
+    /// Terminate the server instance
     Exit,
+    /// Create a new task
     PushTask {
         #[clap(long, short)]
         name: String
     },
+    /// Disable the task with the given id
     DisableTask {
         #[clap(long, short)]
         task_id: u64
     },
+    /// Switch to the task with the given id
     SwitchTask {
         #[clap(long, short)]
         task_id: u64
     },
+    /// Read the current task
     CurrentTask,
+    /// List all registered tasks
     ListTasks,
+    /// Create a new task (json version)
     JsonPushTask {
         #[clap(long, short)]
         name: String
     },
+    /// Disable the task with the given id (json version)
     JsonDisableTask {
         #[clap(long, short)]
         task_id: u64
     },
+    /// Switch to the task with the given id (json version)
     JsonSwitchTask {
         #[clap(long, short)]
         task_id: u64
     },
+    /// Switch to the task with the given id at the given time, eventually returning to the current task (json version)
     JsonRetroSwitchTask {
         #[clap(long)]
         task_id: u64,
@@ -62,7 +72,9 @@ pub enum OClockClientCommand {
         #[clap(long, short)]
         keep_previous_task: bool,
     },
+    /// Read the current state (json version)
     JsonState,
+    /// Produce the full timesheet
     Timesheet,
 }
 
