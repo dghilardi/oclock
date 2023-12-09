@@ -1,6 +1,8 @@
 /target/
 **/*.rs.bk
 /.idea
+/dist
+/builds
 
 # databases
 *.db

@@ -22,4 +22,5 @@ serde_json = "1.0"
 ctrlc = { version = "3.4", features = ["termination"] }
 
 [dependencies.oclock_sqlite]
+version = "0.1.4"
 path = "libs/oclock_sqlite"
