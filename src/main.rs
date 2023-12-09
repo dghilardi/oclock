@@ -1,16 +1,14 @@
 use getopts::Options;
+use log::{debug, error};
+use nng::{Protocol, Socket};
 
-use nng::{Socket, Protocol};
-
-use log::{error, debug};
+use crate::core::server::handlers;
 
 mod core;
 
-use crate::core::server::server;
-
 fn client(request: String) -> bool {
     let socket = Socket::new(Protocol::Req0).unwrap();
-    socket.dial(server::SERVER_URL).unwrap();
+    socket.dial(handlers::SERVER_URL).unwrap();
 
     let mut error_status = false;
 
@@ -85,7 +83,7 @@ fn main() {
                 None => client(core::server::constants::Commands::ListTasks.to_string())
             }
         },
-        Some(ref mode) if mode == "server" => server::server(),
+        Some(ref mode) if mode == "server" => handlers::server(),
         Some(mode) =>
             println!("mode {}", mode),
         None =>

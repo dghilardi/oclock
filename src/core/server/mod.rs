@@ -1,4 +1,4 @@
 mod state;
 
 pub mod constants;
-pub mod server;
+pub mod handlers;

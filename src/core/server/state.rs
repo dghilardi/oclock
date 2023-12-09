@@ -1,15 +1,13 @@
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
-use log::debug;
-use serde::Serialize;
-
 use itertools::Itertools;
-
+use log::debug;
 use oclock_sqlite::connection::DB;
-use oclock_sqlite::models::{NewEvent, NewTask, Task, TimesheetEntry};
-use oclock_sqlite::mappers;
 use oclock_sqlite::constants::SystemEventType;
+use oclock_sqlite::mappers;
+use oclock_sqlite::models::{NewEvent, NewTask, Task, TimesheetEntry};
+use serde::Serialize;
 
 pub struct State {
     database: DB,
@@ -71,7 +69,7 @@ impl State {
     pub fn new_task(&self, name: String) -> Result<String, String> {
 
         let new_task = NewTask {
-            name: name
+            name
         };
 
         let mut connection = self.database.establish_connection();
@@ -144,19 +142,18 @@ impl State {
                 timesheet_tasks.sort();
                 timesheet_tasks.dedup();
 
-                let res =
-                (&v).into_iter()
+                let res = v.iter()
                 .group_by(|vi| vi.day.clone())
                 .into_iter()
                 .map(|(day, records)| {
                     let day_tasks: Vec<&TimesheetEntry> = records.collect();
 
                     TimesheetPivotRecord {
-                        day: day,
+                        day,
                         entries: timesheet_tasks
                             .iter()
-                            .map(|ref task_id| 
-                                match day_tasks.iter().find(|&r| r.task_id == **task_id) {
+                            .map(|task_id|
+                                match day_tasks.iter().find(|&r| r.task_id == *task_id) {
                                     Some(record) => record.amount,
                                     None => 0
                                 }
@@ -171,7 +168,7 @@ impl State {
                     .iter()
                     .map(|ref task_name| 
                         match v.iter().find(|&r| &&r.task_id == task_name) {
-                            Some(&TimesheetEntry { task_name: Some(ref task_name), .. }) => format!("{}", task_name),
+                            Some(&TimesheetEntry { task_name: Some(ref task_name), .. }) => String::from(task_name),
                             _ => "NONE".to_string()
                         }
                     )

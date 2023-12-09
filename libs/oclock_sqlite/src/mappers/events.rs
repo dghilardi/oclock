@@ -1,12 +1,11 @@
 use diesel;
 use diesel::prelude::*;
-use diesel::sqlite::SqliteConnection;
 use diesel::result::Error;
-
+use diesel::sqlite::SqliteConnection;
 use log::debug;
 
-use crate::models::{Event, NewEvent, Task};
 use crate::constants::SystemEventType;
+use crate::models::{Event, NewEvent, Task};
 
 type Backend = ::diesel::sqlite::Sqlite;
 

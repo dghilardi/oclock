@@ -1,9 +1,9 @@
 use diesel::prelude::*;
-use diesel::sqlite::SqliteConnection;
 use diesel::result::Error;
+use diesel::sqlite::SqliteConnection;
 
-use crate::models::{TimesheetEntry};
 use crate::constants::SystemEventType;
+use crate::models::TimesheetEntry;
 
 pub fn full_timesheet(conn: &mut SqliteConnection) -> Result<Vec<TimesheetEntry>, Error> {
     use crate::schema::v_timesheet::dsl::*;

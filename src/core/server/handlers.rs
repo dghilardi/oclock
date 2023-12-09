@@ -1,33 +1,30 @@
-use nng;
-use nng::{Socket, Protocol};
+extern crate ctrlc;
 
-use log::{error, debug};
-
-use std::str;
 use std::env;
+use std::error::Error;
 use std::fs;
+use std::str;
+use std::sync::{Arc, mpsc};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{Receiver, Sender, TryRecvError};
 use std::thread;
 use std::time::Duration;
-use std::error::Error;
-
-use schedule::{Agenda, Job};
 
 use csv::Writer;
+use log::{debug, error};
+use nng;
+use nng::{Protocol, Socket};
+use oclock_sqlite::constants::SystemEventType;
+use schedule::{Agenda, Job};
 use serde;
 use serde_json;
 
-use crate::core::server::state::{State, TimesheetPivotRecord};
 use crate::core::server::constants::Commands;
-use oclock_sqlite::constants::SystemEventType;
+use crate::core::server::state::{State, TimesheetPivotRecord};
 
-extern crate ctrlc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, mpsc};
-use std::sync::mpsc::{Sender, Receiver, TryRecvError};
+pub const SERVER_URL: &str = "ipc:///tmp/time-monitor.ipc";
 
-pub const SERVER_URL: &'static str = "ipc:///tmp/time-monitor.ipc";
-
-pub const SEP: &'static str = "#";
+pub const SEP: &str = "#";
 
 enum MsgListenerStatus {
     Continue,
@@ -72,9 +69,7 @@ fn timesheet_to_csv(tasks: Vec<String>, records: Vec<TimesheetPivotRecord>) -> R
     }
     for item in records {
         let entries_str: Vec<String> = item.entries.iter()
-            .map(|e| 
-                format_time_interval(e)
-            )
+            .map(format_time_interval)
             .collect();
         let out = wtr.serialize((item.day, entries_str));
         if let Err(err) = out {
@@ -98,7 +93,7 @@ fn handle_msg(msg: &str, state: &State) -> Result<String, String> {
     let splitted_cmd: Vec<&str> = msg.split(SEP).collect();
     let (command, args) = splitted_cmd.split_at(1);
     match command.first() {
-        Some(m) if m == &Commands::Exit.to_string() => Ok(format!("bye bye...")),
+        Some(m) if m == &Commands::Exit.to_string() => Ok(String::from("bye bye...")),
         Some(m) if m == &Commands::CurrentTask.to_string() => {
             let task = state.get_current_task()?;
             match task {
@@ -149,7 +144,7 @@ fn handle_msg(msg: &str, state: &State) -> Result<String, String> {
         },
         Some(m) if m == &Commands::JsonRetroSwitchTask.to_string() => { 
             let task_id = 
-            match args.get(0) {
+            match args.first() {
                 Some(task_id_str) => Ok(task_id_str.parse::<u64>().unwrap()),
                 None => Err("No task_id parameter found".to_string())
             }?;
@@ -171,11 +166,11 @@ fn handle_msg(msg: &str, state: &State) -> Result<String, String> {
         },
         Some(no_match) => {
             error!("message '{:?}' not handled", no_match);
-            Err(format!("Not recognized"))
+            Err(String::from("Not recognized"))
         },
         None => {
             error!("command not recognized");
-            Err(format!("Not recognized"))
+            Err(String::from("Not recognized"))
         }
     }
 }
@@ -185,7 +180,7 @@ fn nanomsg_listen(socket: &mut Socket, state: &State) -> MsgListenerStatus {
         Ok(message) => {
             let message_str = str::from_utf8(&message);
             let status = match message_str {
-                Ok(msg) if msg == "EXIT" => MsgListenerStatus::Terminate,
+                Ok("EXIT") => MsgListenerStatus::Terminate,
                 Ok(_) => MsgListenerStatus::Continue,
                 Err(_) => MsgListenerStatus::Fail,
             };
@@ -195,7 +190,7 @@ fn nanomsg_listen(socket: &mut Socket, state: &State) -> MsgListenerStatus {
                 Ok(msg) => handle_msg(msg, state),
                 Err(e) => {
                     error!("Invalid UTF-8 sequence: {}", e);
-                    Err(format!("Invalid UTF-8 sequence"))
+                    Err(String::from("Invalid UTF-8 sequence"))
                 },
             };
 

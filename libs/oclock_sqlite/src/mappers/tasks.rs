@@ -1,9 +1,9 @@
 use diesel;
 use diesel::prelude::*;
-use diesel::sqlite::SqliteConnection;
 use diesel::result::Error;
+use diesel::sqlite::SqliteConnection;
 
-use crate::models::{Task, NewTask};
+use crate::models::{NewTask, Task};
 
 pub fn create_task(conn: &mut SqliteConnection, task: &NewTask) -> Result<usize, Error> {
     use crate::schema::tasks;

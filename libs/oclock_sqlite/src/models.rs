@@ -1,6 +1,6 @@
-use super::schema::*;
-
 use serde::Serialize;
+
+use super::schema::*;
 
 #[derive(Insertable)]
 #[diesel(table_name=tasks)]

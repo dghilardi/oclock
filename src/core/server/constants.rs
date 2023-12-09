@@ -1,4 +1,5 @@
 use std::fmt;
+
 use inflector::cases::screamingsnakecase::to_screaming_snake_case;
 
 #[derive(Debug)]
