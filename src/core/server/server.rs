@@ -40,7 +40,10 @@ fn vec_to_csv<T>(items: Vec<T>) -> Result<String, Box<dyn Error>> where
 {
     let mut wtr = Writer::from_writer(vec![]);
     for item in items {
-        wtr.serialize(item);
+        let out = wtr.serialize(item);
+        if let Err(err) = out {
+            log::warn!("Error serializing item - {err}");
+        }
     }
 
     let data = String::from_utf8(wtr.into_inner()?)?;
@@ -63,14 +66,20 @@ fn format_time_interval(i: &i32) -> String {
 
 fn timesheet_to_csv(tasks: Vec<String>, records: Vec<TimesheetPivotRecord>) -> Result<String, Box<dyn Error>> {
     let mut wtr = Writer::from_writer(vec![]);
-    wtr.serialize(("day", tasks));
+    let out = wtr.serialize(("day", tasks));
+    if let Err(err) = out {
+        log::warn!("Error serializing tasks - {err}");
+    }
     for item in records {
         let entries_str: Vec<String> = item.entries.iter()
             .map(|e| 
                 format_time_interval(e)
             )
             .collect();
-        wtr.serialize((item.day, entries_str));
+        let out = wtr.serialize((item.day, entries_str));
+        if let Err(err) = out {
+            log::warn!("Error serializing day entries - {err}");
+        }
     }
 
     let data = String::from_utf8(wtr.into_inner()?)?;
@@ -127,7 +136,10 @@ fn handle_msg(msg: &str, state: &State) -> Result<String, String> {
         },
         Some(m) if m == &Commands::JsonDisableTask.to_string() => {
             let task_id = args.join(SEP).parse::<u64>().unwrap();
-            state.change_task_enabled_flag(task_id, false);
+            let out = state.change_task_enabled_flag(task_id, false);
+            if let Err(err) = out {
+                log::warn!("Error disabling task {task_id} - {err}");
+            }
             compute_state(state)
         },
         Some(m) if m == &Commands::JsonSwitchTask.to_string() => {
@@ -230,15 +242,24 @@ pub fn server() {
     });
 
     let state = State::new(cfg_path);
-    state.system_event(SystemEventType::Startup);
-    state.system_event(SystemEventType::Ping);
+    let out = state.system_event(SystemEventType::Startup);
+    if let Err(err) = out {
+        log::warn!("Error pushing system event startup - {err}");
+    }
+    let out = state.system_event(SystemEventType::Ping);
+    if let Err(err) = out {
+        log::warn!("Error pushing system event ping - {err}");
+    }
 
     let mut a = Agenda::new();
 
     // Run every second
     a.add(Job::new(|| {
         let daemon_status = nanomsg_listen(&mut nanomsg_socket, &state);
-        command_tx.send(daemon_status);
+        let out = command_tx.send(daemon_status);
+        if let Err(err) = out {
+            log::error!("Error sending command in channel - {err}");
+        }
     }, "* * * * * *".parse().unwrap()));
 
     // Run every minute
@@ -271,5 +292,8 @@ pub fn server() {
 
     println!("Shutting down");
 
-    state.system_event(SystemEventType::Shutdown);
+    let out = state.system_event(SystemEventType::Shutdown);
+    if let Err(err) = out {
+        log::error!("Error writing system event shutdown - {err}");
+    }
 }

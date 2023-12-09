@@ -46,7 +46,10 @@ fn initialize(database: DB) -> DB {
                         system_event_name: Some(SystemEventType::Shutdown.to_string()),
                     };
 
-                    mappers::events::push_event(&mut connection, &event);
+                    let out = mappers::events::push_event(&mut connection, &event);
+                    if let Err(err) = out {
+                        log::error!("Error pushing shut-down event - {err}");
+                    }
                 }
             },
         Err(e) => 
@@ -153,7 +156,7 @@ impl State {
                         entries: timesheet_tasks
                             .iter()
                             .map(|ref task_id| 
-                                match day_tasks.iter().find(|&r| r.task_id == task_id.clone().clone()) {
+                                match day_tasks.iter().find(|&r| r.task_id == **task_id) {
                                     Some(record) => record.amount,
                                     None => 0
                                 }

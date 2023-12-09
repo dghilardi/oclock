@@ -3,7 +3,7 @@ use super::schema::*;
 use serde::Serialize;
 
 #[derive(Insertable)]
-#[table_name="tasks"]
+#[diesel(table_name=tasks)]
 pub struct NewTask {
     pub name: String,
 }
@@ -16,7 +16,7 @@ pub struct Task {
 }
 
 #[derive(Insertable)]
-#[table_name="events"]
+#[diesel(table_name=events)]
 pub struct NewEvent {
     pub event_timestamp: i32,
     pub task_id: Option<i32>,
