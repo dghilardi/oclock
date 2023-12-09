@@ -6,20 +6,20 @@ authors = ["Davide Ghilardi <ghilardi.davide@gmail.com>"]
 
 [dependencies]
 log = "0.4"
-env_logger = "0.8"
+env_logger = "0.10"
 Inflector = {version="0.11", default-features=false}
 
-nng = "0.5"
+nng = "1.0"
 getopts = "0.2"
 
 schedule = "0.1"
-itertools = "0.10"
+itertools = "0.12"
 
-csv = "1.1"
+csv = "1.3"
 serde = { version ="1.0", features = ["derive"] }
 serde_json = "1.0"
 
-ctrlc = { version = "3.1", features = ["termination"] }
+ctrlc = { version = "3.4", features = ["termination"] }
 
 [dependencies.oclock_sqlite]
 path = "libs/oclock_sqlite"
