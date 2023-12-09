@@ -2,11 +2,12 @@ use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
 use itertools::Itertools;
-
+use log::debug;
 use oclock_sqlite::connection::DB;
-use oclock_sqlite::models::{NewEvent, NewTask, Task, TimesheetEntry};
-use oclock_sqlite::mappers;
 use oclock_sqlite::constants::SystemEventType;
+use oclock_sqlite::mappers;
+use oclock_sqlite::models::{NewEvent, NewTask, Task, TimesheetEntry};
+use serde::Serialize;
 
 pub struct State {
     database: DB,
@@ -25,9 +26,9 @@ pub struct TimesheetPivotRecord {
 }
 
 fn initialize(database: DB) -> DB {
-    let connection = database.establish_connection();
+    let mut connection = database.establish_connection();
 
-    match mappers::events::get_last_event(&connection) {
+    match mappers::events::get_last_event(&mut connection) {
         Ok(last_event) =>
             match last_event.system_event_name {
                 Some(ref sys_evt) if sys_evt == &SystemEventType::Shutdown.to_string() =>
@@ -43,13 +44,16 @@ fn initialize(database: DB) -> DB {
                         system_event_name: Some(SystemEventType::Shutdown.to_string()),
                     };
 
-                    mappers::events::push_event(&connection, &event);
+                    let out = mappers::events::push_event(&mut connection, &event);
+                    if let Err(err) = out {
+                        log::error!("Error pushing shut-down event - {err}");
+                    }
                 }
             },
         Err(e) => 
             debug!("Error: {:?}", e)
     }
-    mappers::events::remove_all_system_events(&connection, SystemEventType::Ping.to_string());
+    mappers::events::remove_all_system_events(&mut connection, SystemEventType::Ping.to_string());
 
     database
 }
@@ -65,12 +69,12 @@ impl State {
     pub fn new_task(&self, name: String) -> Result<String, String> {
 
         let new_task = NewTask {
-            name: name
+            name
         };
 
-        let connection = self.database.establish_connection();
+        let mut connection = self.database.establish_connection();
 
-        match mappers::tasks::create_task(&connection, &new_task) {
+        match mappers::tasks::create_task(&mut connection, &new_task) {
             Ok(task_id) => Result::Ok(format!("New task id '{}'", task_id)),
             Err(err) => Result::Err(format!("Error during task insert '{}'", err)),
         }
@@ -79,7 +83,7 @@ impl State {
     pub fn switch_task(&self, id: u64) -> Result<String, String> {
         let unix_now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
-        let connection = self.database.establish_connection();
+        let mut connection = self.database.establish_connection();
 
         let event = NewEvent {
             event_timestamp: unix_now as i32,
@@ -87,7 +91,7 @@ impl State {
             system_event_name: None,
         };
 
-        match mappers::events::push_event(&connection, &event) {
+        match mappers::events::push_event(&mut connection, &event) {
             Ok(evt_id) => Result::Ok(format!("New event id '{}'", evt_id)),
             Err(err) => Result::Err(format!("Error during task switch '{}'", err)),
         }
@@ -96,7 +100,7 @@ impl State {
     pub fn system_event(&self, evt: SystemEventType) -> Result<String, String> {
         let unix_now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
-        let connection = self.database.establish_connection();
+        let mut connection = self.database.establish_connection();
 
         let event = NewEvent {
             event_timestamp: unix_now as i32,
@@ -104,7 +108,7 @@ impl State {
             system_event_name: Some(evt.to_string()),
         };
 
-        match mappers::events::push_event(&connection, &event) {
+        match mappers::events::push_event(&mut connection, &event) {
             Ok(evt_id) => Result::Ok(format!("New event id '{}'", evt_id)),
             Err(err) => Result::Err(format!("Error inserting system event '{}'", err)),
         }
@@ -112,22 +116,22 @@ impl State {
 
     pub fn ping(&self) {
         let unix_now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
-        let connection = self.database.establish_connection();
+        let mut connection = self.database.establish_connection();
 
-        mappers::events::move_system_event(&connection, unix_now as i32, SystemEventType::Ping.to_string())
+        mappers::events::move_system_event(&mut connection, unix_now as i32, SystemEventType::Ping.to_string())
     }
 
     pub fn list_tasks(&self) -> Result<Vec<Task>, String> {
-        let connection = self.database.establish_connection();
-        match mappers::tasks::list_tasks(&connection) {
+        let mut connection = self.database.establish_connection();
+        match mappers::tasks::list_tasks(&mut connection) {
             Ok(v) => Ok(v),
             Err(e) => Err(format!("Error retrieving tasks list: '{}'", e))
         }
     }
 
     pub fn full_timesheet(&self) -> Result<(Vec<String>,Vec<TimesheetPivotRecord>), String> {
-        let connection = self.database.establish_connection();
-        match mappers::timesheet::full_timesheet(&connection) {
+        let mut connection = self.database.establish_connection();
+        match mappers::timesheet::full_timesheet(&mut connection) {
             Ok(v) => {
                 let mut timesheet_tasks : Vec<Option<i32>> =
                 v.iter()
@@ -138,19 +142,18 @@ impl State {
                 timesheet_tasks.sort();
                 timesheet_tasks.dedup();
 
-                let res =
-                (&v).into_iter()
+                let res = v.iter()
                 .group_by(|vi| vi.day.clone())
                 .into_iter()
                 .map(|(day, records)| {
                     let day_tasks: Vec<&TimesheetEntry> = records.collect();
 
                     TimesheetPivotRecord {
-                        day: day,
+                        day,
                         entries: timesheet_tasks
                             .iter()
-                            .map(|ref task_id| 
-                                match day_tasks.iter().find(|&r| r.task_id == task_id.clone().clone()) {
+                            .map(|task_id|
+                                match day_tasks.iter().find(|&r| r.task_id == *task_id) {
                                     Some(record) => record.amount,
                                     None => 0
                                 }
@@ -165,7 +168,7 @@ impl State {
                     .iter()
                     .map(|ref task_name| 
                         match v.iter().find(|&r| &&r.task_id == task_name) {
-                            Some(&TimesheetEntry { task_name: Some(ref task_name), .. }) => format!("{}", task_name),
+                            Some(&TimesheetEntry { task_name: Some(ref task_name), .. }) => String::from(task_name),
                             _ => "NONE".to_string()
                         }
                     )
@@ -178,16 +181,16 @@ impl State {
     }
 
     pub fn change_task_enabled_flag(&self, id: u64, enabled: bool) -> Result<String, String> {
-        let connection = self.database.establish_connection();
-        match mappers::tasks::change_enabled(&connection, id as i32, enabled) {
+        let mut connection = self.database.establish_connection();
+        match mappers::tasks::change_enabled(&mut connection, id as i32, enabled) {
             Ok(_) => Ok(format!("Task {} enabled: {}", id, enabled)),
             Err(e) => Err(format!("Error switching task enabled flag: '{}'", e))
         }
     }
 
     pub fn get_current_task(&self) -> Result<Option<Task>, String> {
-        let connection = self.database.establish_connection();
-        match mappers::events::current_task(&connection) {
+        let mut connection = self.database.establish_connection();
+        match mappers::events::current_task(&mut connection) {
             Ok(t) => Ok(t),
             Err(e) => Err(format!("Error while fetching last task switch '{}'", e))
         }
@@ -209,7 +212,7 @@ impl State {
 
         let unix_now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
-        let connection = self.database.establish_connection();
+        let mut connection = self.database.establish_connection();
 
         let event = NewEvent {
             event_timestamp: timestamp,
@@ -217,7 +220,7 @@ impl State {
             system_event_name: None,
         };
 
-        match mappers::events::push_event(&connection, &event) {
+        match mappers::events::push_event(&mut connection, &event) {
             Ok(evt_id) => Result::Ok(format!("New event id '{}'", evt_id)),
             Err(err) => Result::Err(format!("Error during task switch '{}'", err)),
         }?;
@@ -230,7 +233,7 @@ impl State {
                     system_event_name: None
                 };
 
-                match mappers::events::push_event(&connection, &redo_prev_task_evt) {
+                match mappers::events::push_event(&mut connection, &redo_prev_task_evt) {
                     Ok(evt_id) => Result::Ok(format!("New event id '{}'", evt_id)),
                     Err(err) => Result::Err(format!("Error during task switch '{}'", err)),
                 }

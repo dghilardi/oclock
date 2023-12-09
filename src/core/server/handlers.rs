@@ -1,31 +1,30 @@
-use nanomsg;
-use nanomsg::{Socket, Protocol};
+extern crate ctrlc;
 
-use std::str;
 use std::env;
+use std::error::Error;
 use std::fs;
+use std::str;
+use std::sync::{Arc, mpsc};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{Receiver, Sender, TryRecvError};
 use std::thread;
 use std::time::Duration;
-use std::error::Error;
 
-use schedule::{Agenda, Job};
-
-use std::io::{Write};
 use csv::Writer;
+use log::{debug, error};
+use nng;
+use nng::{Protocol, Socket};
+use oclock_sqlite::constants::SystemEventType;
+use schedule::{Agenda, Job};
 use serde;
 use serde_json;
 
-use core::server::state::{State, TimesheetPivotRecord};
-use core::server::constants::Commands;
-use oclock_sqlite::constants::SystemEventType;
+use crate::core::server::constants::Commands;
+use crate::core::server::state::{State, TimesheetPivotRecord};
 
-extern crate ctrlc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+pub const SERVER_URL: &str = "ipc:///tmp/time-monitor.ipc";
 
-pub const SERVER_URL: &'static str = "ipc:///tmp/time-monitor.ipc";
-
-pub const SEP: &'static str = "#";
+pub const SEP: &str = "#";
 
 enum MsgListenerStatus {
     Continue,
@@ -33,12 +32,15 @@ enum MsgListenerStatus {
     Fail
 }
 
-fn vec_to_csv<T>(items: Vec<T>) -> Result<String, Box<Error>> where
+fn vec_to_csv<T>(items: Vec<T>) -> Result<String, Box<dyn Error>> where
     T: serde::ser::Serialize
 {
     let mut wtr = Writer::from_writer(vec![]);
     for item in items {
-        wtr.serialize(item);
+        let out = wtr.serialize(item);
+        if let Err(err) = out {
+            log::warn!("Error serializing item - {err}");
+        }
     }
 
     let data = String::from_utf8(wtr.into_inner()?)?;
@@ -59,16 +61,20 @@ fn format_time_interval(i: &i32) -> String {
     format!("{:02}:{:02}:{:02}", i/3600, (i-(i/3600)*3600)/60, i-(i/60)*60)
 }
 
-fn timesheet_to_csv(tasks: Vec<String>, records: Vec<TimesheetPivotRecord>) -> Result<String, Box<Error>> {
+fn timesheet_to_csv(tasks: Vec<String>, records: Vec<TimesheetPivotRecord>) -> Result<String, Box<dyn Error>> {
     let mut wtr = Writer::from_writer(vec![]);
-    wtr.serialize(("day", tasks));
+    let out = wtr.serialize(("day", tasks));
+    if let Err(err) = out {
+        log::warn!("Error serializing tasks - {err}");
+    }
     for item in records {
         let entries_str: Vec<String> = item.entries.iter()
-            .map(|e| 
-                format_time_interval(e)
-            )
+            .map(format_time_interval)
             .collect();
-        wtr.serialize((item.day, entries_str));
+        let out = wtr.serialize((item.day, entries_str));
+        if let Err(err) = out {
+            log::warn!("Error serializing day entries - {err}");
+        }
     }
 
     let data = String::from_utf8(wtr.into_inner()?)?;
@@ -87,7 +93,7 @@ fn handle_msg(msg: &str, state: &State) -> Result<String, String> {
     let splitted_cmd: Vec<&str> = msg.split(SEP).collect();
     let (command, args) = splitted_cmd.split_at(1);
     match command.first() {
-        Some(m) if m == &Commands::Exit.to_string() => Ok(format!("bye bye...")),
+        Some(m) if m == &Commands::Exit.to_string() => Ok(String::from("bye bye...")),
         Some(m) if m == &Commands::CurrentTask.to_string() => {
             let task = state.get_current_task()?;
             match task {
@@ -125,7 +131,10 @@ fn handle_msg(msg: &str, state: &State) -> Result<String, String> {
         },
         Some(m) if m == &Commands::JsonDisableTask.to_string() => {
             let task_id = args.join(SEP).parse::<u64>().unwrap();
-            state.change_task_enabled_flag(task_id, false);
+            let out = state.change_task_enabled_flag(task_id, false);
+            if let Err(err) = out {
+                log::warn!("Error disabling task {task_id} - {err}");
+            }
             compute_state(state)
         },
         Some(m) if m == &Commands::JsonSwitchTask.to_string() => {
@@ -135,7 +144,7 @@ fn handle_msg(msg: &str, state: &State) -> Result<String, String> {
         },
         Some(m) if m == &Commands::JsonRetroSwitchTask.to_string() => { 
             let task_id = 
-            match args.get(0) {
+            match args.first() {
                 Some(task_id_str) => Ok(task_id_str.parse::<u64>().unwrap()),
                 None => Err("No task_id parameter found".to_string())
             }?;
@@ -157,32 +166,31 @@ fn handle_msg(msg: &str, state: &State) -> Result<String, String> {
         },
         Some(no_match) => {
             error!("message '{:?}' not handled", no_match);
-            Err(format!("Not recognized"))
+            Err(String::from("Not recognized"))
         },
         None => {
             error!("command not recognized");
-            Err(format!("Not recognized"))
+            Err(String::from("Not recognized"))
         }
     }
 }
 
 fn nanomsg_listen(socket: &mut Socket, state: &State) -> MsgListenerStatus {
-    let mut buffer = Vec::new();
-
-    match socket.nb_read_to_end(&mut buffer) {
-        Ok(_) => {
-            let status = match str::from_utf8(buffer.as_slice()) {
-                Ok(msg) if msg == "EXIT" => MsgListenerStatus::Terminate,
+    match socket.recv() {
+        Ok(message) => {
+            let message_str = str::from_utf8(&message);
+            let status = match message_str {
+                Ok("EXIT") => MsgListenerStatus::Terminate,
                 Ok(_) => MsgListenerStatus::Continue,
                 Err(_) => MsgListenerStatus::Fail,
             };
 
             let cmd_outcome =
-            match str::from_utf8(buffer.as_slice()) {
+            match message_str {
                 Ok(msg) => handle_msg(msg, state),
                 Err(e) => {
                     error!("Invalid UTF-8 sequence: {}", e);
-                    Err(format!("Invalid UTF-8 sequence"))
+                    Err(String::from("Invalid UTF-8 sequence"))
                 },
             };
 
@@ -192,18 +200,16 @@ fn nanomsg_listen(socket: &mut Socket, state: &State) -> MsgListenerStatus {
                 Err(msg) => format!("ERR#{}", msg),
             };
 
-            match socket.write_all(reply.as_bytes()) {
+            match socket.send(reply.as_bytes()) {
                 Ok(..) => println!("Sent '{}'.", reply),
                 Err(err) => {
-                    error!("Server failed to send reply '{}'.", err)
+                    error!("Server failed to send reply '{:?}'.", err)
                 }
             };
 
-            buffer.clear();
-
             status
         },
-        Err(nanomsg::Error::TryAgain) => {
+        Err(nng::Error::TryAgain) => {
             debug!("No message received");
             MsgListenerStatus::Continue
         },
@@ -216,8 +222,9 @@ fn nanomsg_listen(socket: &mut Socket, state: &State) -> MsgListenerStatus {
 }
 
 pub fn server() {
-    let mut nanomsg_socket = Socket::new(Protocol::Rep).unwrap();
-    let mut nanomsg_endpoint = nanomsg_socket.bind(SERVER_URL).unwrap();
+    let mut nanomsg_socket = Socket::new(Protocol::Rep0).unwrap();
+    nanomsg_socket.listen(SERVER_URL).unwrap();
+    let (command_tx, command_rx): (Sender<MsgListenerStatus>, Receiver<MsgListenerStatus>) = mpsc::channel();
 
     let cfg_path = 
     match env::var("HOME") {
@@ -230,15 +237,24 @@ pub fn server() {
     });
 
     let state = State::new(cfg_path);
-    state.system_event(SystemEventType::Startup);
-    state.system_event(SystemEventType::Ping);
+    let out = state.system_event(SystemEventType::Startup);
+    if let Err(err) = out {
+        log::warn!("Error pushing system event startup - {err}");
+    }
+    let out = state.system_event(SystemEventType::Ping);
+    if let Err(err) = out {
+        log::warn!("Error pushing system event ping - {err}");
+    }
 
-    let mut daemon_status = MsgListenerStatus::Continue;
     let mut a = Agenda::new();
 
     // Run every second
     a.add(Job::new(|| {
-        daemon_status = nanomsg_listen(&mut nanomsg_socket, &state);
+        let daemon_status = nanomsg_listen(&mut nanomsg_socket, &state);
+        let out = command_tx.send(daemon_status);
+        if let Err(err) = out {
+            log::error!("Error sending command in channel - {err}");
+        }
     }, "* * * * * *".parse().unwrap()));
 
     // Run every minute
@@ -256,8 +272,9 @@ pub fn server() {
     loop {
         a.run_pending();
 
-        match daemon_status {
-            MsgListenerStatus::Continue => (),
+        match command_rx.try_recv() {
+            Ok(MsgListenerStatus::Continue) => (),
+            Err(TryRecvError::Empty) => (),
             _ => break,
         }
 
@@ -270,6 +287,8 @@ pub fn server() {
 
     println!("Shutting down");
 
-    state.system_event(SystemEventType::Shutdown);
-    nanomsg_endpoint.shutdown();
+    let out = state.system_event(SystemEventType::Shutdown);
+    if let Err(err) = out {
+        log::error!("Error writing system event shutdown - {err}");
+    }
 }

@@ -1,31 +1,32 @@
 use diesel;
 use diesel::prelude::*;
-use diesel::sqlite::SqliteConnection;
 use diesel::result::Error;
+use diesel::sqlite::SqliteConnection;
+use log::debug;
 
-use models::{Event, NewEvent, Task};
-use constants::SystemEventType;
+use crate::constants::SystemEventType;
+use crate::models::{Event, NewEvent, Task};
 
 type Backend = ::diesel::sqlite::Sqlite;
 
-pub fn push_event(conn: &SqliteConnection, task: &NewEvent) -> Result<usize, Error> {
-    use schema::events;
+pub fn push_event(conn: &mut SqliteConnection, task: &NewEvent) -> Result<usize, Error> {
+    use crate::schema::events;
 
-    diesel::insert(task)
-        .into(events::table)
+    diesel::insert_into(events::table)
+        .values(task)
         .execute(conn)
 }
 
-pub fn get_last_event(conn: &SqliteConnection) -> Result<Event, Error> {
-    use schema::events::dsl::*;
+pub fn get_last_event(conn: &mut SqliteConnection) -> Result<Event, Error> {
+    use crate::schema::events::dsl::*;
 
     events
     .order(event_timestamp.desc())
     .first(conn)
 }
 
-pub fn remove_all_system_events(conn: &SqliteConnection, event_name: String) {
-    use schema::events::dsl::*;
+pub fn remove_all_system_events(conn: &mut SqliteConnection, event_name: String) {
+    use crate::schema::events::dsl::*;
 
     let num_deleted = diesel::delete(events.filter(system_event_name.eq(&event_name)))
         .execute(conn)
@@ -34,8 +35,8 @@ pub fn remove_all_system_events(conn: &SqliteConnection, event_name: String) {
     debug!("deleted {} system events with type {}", num_deleted, event_name);
 }
 
-pub fn move_system_event(conn: &SqliteConnection, unix_ts: i32, event_name: String) {
-    use schema::events::dsl::*;
+pub fn move_system_event(conn: &mut SqliteConnection, unix_ts: i32, event_name: String) {
+    use crate::schema::events::dsl::*;
 
     diesel::update(events.filter(system_event_name.eq(&event_name)))
         .set(event_timestamp.eq(unix_ts))
@@ -43,10 +44,10 @@ pub fn move_system_event(conn: &SqliteConnection, unix_ts: i32, event_name: Stri
         .expect(&format!("Error updating {} timestamp", event_name));
 }
 
-pub fn current_task(conn: &SqliteConnection) -> Result<Option<Task>, Error> {
-    use schema::events::dsl::*;
-    use schema::tasks::dsl::*;
-    use schema::tasks::dsl::id;
+pub fn current_task(conn: &mut SqliteConnection) -> Result<Option<Task>, Error> {
+    use crate::schema::events::dsl::*;
+    use crate::schema::tasks::dsl::*;
+    use crate::schema::tasks::dsl::id;
 
     let last_evt_query = events
     .filter(

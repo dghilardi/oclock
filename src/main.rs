@@ -1,73 +1,50 @@
-#![allow(unused_must_use)]
-
-extern crate inflector;
-extern crate nanomsg;
-extern crate getopts;
-
-#[macro_use]
-extern crate log;
-extern crate env_logger;
-
-extern crate schedule;
-
-extern crate csv;
-extern crate serde;
-extern crate serde_json;
-#[macro_use] extern crate serde_derive;
-
-extern crate itertools;
-
-extern crate oclock_sqlite;
-
 use getopts::Options;
+use log::{debug, error};
+use nng::{Protocol, Socket};
 
-use nanomsg::{Socket, Protocol};
-
-use std::io::{Read, Write};
+use crate::core::server::handlers;
 
 mod core;
 
-use core::server::server;
-
 fn client(request: String) -> bool {
-    let mut socket = Socket::new(Protocol::Req).unwrap();
-    let mut endpoint = socket.connect(server::SERVER_URL).unwrap();
+    let socket = Socket::new(Protocol::Req0).unwrap();
+    socket.dial(handlers::SERVER_URL).unwrap();
 
-    let mut reply = String::new();
     let mut error_status = false;
 
-    match socket.write_all(request.as_bytes()) {
+    match socket.send(request.as_bytes()) {
         Ok(..) => debug!("Send '{}'.", request),
-        Err(err) => error!("Client failed to send request '{}'.", err)
+        Err(err) => error!("Client failed to send request '{:?}'.", err)
     }
 
-    match socket.read_to_string(&mut reply) {
-        Ok(_) if reply.starts_with("OK#") => {
-            debug!("Recv '{}'.", reply);
+    match socket.recv() {
+        Ok(reply) if reply.starts_with(b"OK#") => {
+            debug!("Recv '{:?}'.", reply);
 
-            let msg = reply.replace("OK#","");
+            let msg = std::str::from_utf8(&reply)
+                .expect("Error deserializing response")
+                .replace("OK#","");
 
             println!("{}", msg);
-            reply.clear()
         },
-        Ok(_) if reply.starts_with("ERR#") => {
-            debug!("Recv '{}'.", reply);
+        Ok(reply) if reply.starts_with(b"ERR#") => {
+            debug!("Recv '{:?}'.", reply);
 
-            let msg = reply.replace("ERR#","");
+            let msg = std::str::from_utf8(&reply)
+                .expect("Error deserializing response")
+                .replace("ERR#","");
 
             eprintln!("{}", msg);
             error_status = true;
-            reply.clear()
         },
-        Ok(_) => {
-            error!("not recognized response {}", reply);
+        Ok(reply) => {
+            error!("not recognized response {:?}", reply);
             error_status = true;
-            reply.clear()
         }
         Err(err) => error!("Client failed to receive reply '{}'.", err),
     }
 
-    endpoint.shutdown();
+    socket.close();
     error_status
 }
 
@@ -89,7 +66,7 @@ fn main() {
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m }
-        Err(f) => { panic!(f.to_string()) }
+        Err(f) => { panic!("{}", f) }
     };
 
     if matches.opt_present("h") {
@@ -106,7 +83,7 @@ fn main() {
                 None => client(core::server::constants::Commands::ListTasks.to_string())
             }
         },
-        Some(ref mode) if mode == "server" => server::server(),
+        Some(ref mode) if mode == "server" => handlers::server(),
         Some(mode) =>
             println!("mode {}", mode),
         None =>
