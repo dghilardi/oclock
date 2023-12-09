@@ -1,19 +1,21 @@
-use getopts::Options;
+use clap::Parser;
 use log::{debug, error};
 use nng::{Protocol, Socket};
+use crate::cli::args::{OClockArgs, OClockClientCommand, OClockCommand};
 
 use crate::core::server::handlers;
 
 mod core;
+mod cli;
 
-fn client(request: String) -> bool {
+fn client(command: OClockClientCommand) -> bool {
     let socket = Socket::new(Protocol::Req0).unwrap();
     socket.dial(handlers::SERVER_URL).unwrap();
 
     let mut error_status = false;
 
-    match socket.send(request.as_bytes()) {
-        Ok(..) => debug!("Send '{}'.", request),
+    match socket.send(command.to_string().as_bytes()) {
+        Ok(..) => debug!("Send '{:?}'.", command),
         Err(err) => error!("Client failed to send request '{:?}'.", err)
     }
 
@@ -48,46 +50,16 @@ fn client(request: String) -> bool {
     error_status
 }
 
-fn print_usage(program: &str, opts: Options) {
-    let brief = format!("Usage: {} [options]", program);
-    print!("{}", opts.usage(&brief));
-}
-
 fn main() {
     env_logger::init();
-
-    let args: Vec<_> = std::env::args().collect();
-    let program = args[0].clone();
-
-    let mut opts = Options::new();
-    opts.optopt("m", "mode", "oclock operation mode", "MODE");
-    opts.optopt("c", "command", "oclock client command", "COMMAND#PARAMS");
-    opts.optflag("h", "help", "print this help menu");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => { m }
-        Err(f) => { panic!("{}", f) }
-    };
-
-    if matches.opt_present("h") {
-        print_usage(&program, opts);
-        return;
-    }
+    let args: OClockArgs = OClockArgs::parse();
 
     let mut error_state = false;
-    match matches.opt_str("m") {
-        Some(ref mode) if mode == "client" => {
-            error_state =
-            match matches.opt_str("c") {
-                Some(command) => client(command),
-                None => client(core::server::constants::Commands::ListTasks.to_string())
-            }
+    match args.subcommand {
+        OClockCommand::Client(client_args) => {
+            error_state = client(client_args.command)
         },
-        Some(ref mode) if mode == "server" => handlers::server(),
-        Some(mode) =>
-            println!("mode {}", mode),
-        None =>
-            print_usage(&program, opts),
+        OClockCommand::Server => handlers::server(),
     };
 
     std::process::exit(if error_state {
