@@ -1,7 +1,7 @@
 [package]
 edition = "2021"
 name = "oclock"
-version = "0.1.4"
+version = "0.1.5"
 
 authors = ["Davide Ghilardi <dghila@d71.dev>"]
 description = "Time tracking utility"
@@ -28,5 +28,5 @@ serde_json = "1.0"
 ctrlc = { version = "3.4", features = ["termination"] }
 
 [dependencies.oclock_sqlite]
-version = "0.1.4"
+version = "0.1.5"
 path = "libs/oclock_sqlite"

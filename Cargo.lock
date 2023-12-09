@@ -379,7 +379,7 @@ dependencies = [
 
 [[package]]
 name = "oclock"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "Inflector",
  "csv",
@@ -397,7 +397,7 @@ dependencies = [
 
 [[package]]
 name = "oclock_sqlite"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "diesel",
  "diesel_migrations",
