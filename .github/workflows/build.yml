@@ -45,13 +45,19 @@ jobs:
           dist/oclock-linux.tar.gz
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+    - name: Download dasel
+      run: |
+        wget https://github.com/tomwright/dasel/releases/latest/download/dasel_linux_amd64
+        mkdir -p /tmp/bin
+        mv dasel_linux_amd64 /tmp/bin/dasel 
+        chmod +x /tmp/bin/dasel 
+        /tmp/bin/dasel --version
     - name: Publish cargo package
       env:
         CARGO_ACCESS_TOKEN: ${{ secrets.CARGO_ACCESS_TOKEN }}
       run: |
         cargo login "$CARGO_ACCESS_TOKEN"
         cd libs/oclock_sqlite
-        cargo publish
+        [[ $(curl -s https://index.crates.io/oc/lo/oclock_sqlite | jq "select(.vers==$(/tmp/bin/dasel -f Cargo.toml 'package.version' -w json)) | .vers") ]] || cargo publish
         cd ../..
         cargo publish
