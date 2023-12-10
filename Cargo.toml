@@ -18,8 +18,6 @@ clap = { version = "4.4", features = ["derive"], optional = true }
 
 nng = { version = "1.0", optional = true }
 
-Inflector = {version="0.11", default-features=false, optional = true}
-
 schedule = { version = "0.1", optional = true }
 itertools = { version = "0.12", optional = true }
 
@@ -35,8 +33,9 @@ version = "0.1.5"
 path = "libs/oclock_sqlite"
 
 [features]
-client = ["nng"]
-server = ["nng", "Inflector", "schedule", "itertools", "csv", "serde", "serde_json", "ctrlc", "oclock_sqlite"]
+api = ["serde"]
+client = ["nng", "api", "serde_json"]
+server = ["nng", "api", "serde_json", "schedule", "itertools", "csv", "ctrlc", "oclock_sqlite"]
 bin-cli = ["clap", "env_logger"]
 
 [[bin]]

@@ -1,13 +1,13 @@
-use std::fmt::Debug;
 use nng::{Protocol, Socket};
+use crate::dto::command::OClockClientCommand;
 
-pub fn send_command(command: impl ToString + Debug) -> bool {
+pub fn send_command(command: OClockClientCommand) -> bool {
     let socket = Socket::new(Protocol::Req0).unwrap();
     socket.dial(crate::core::constants::SERVER_URL).unwrap();
 
     let mut error_status = false;
 
-    match socket.send(command.to_string().as_bytes()) {
+    match socket.send(&serde_json::to_vec(&command).expect("Cannot serialize command")) {
         Ok(..) => log::debug!("Send '{:?}'.", command),
         Err(err) => log::error!("Client failed to send request '{:?}'.", err)
     }

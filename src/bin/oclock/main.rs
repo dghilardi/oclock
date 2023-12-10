@@ -12,7 +12,7 @@ fn main() {
     match args.subcommand {
         #[cfg(feature = "client")]
         OClockCommand::Client(client_args) => {
-            error_state = oclock::client::handler::send_command(client_args.command)
+            error_state = oclock::client::handler::send_command(client_args.command.into())
         },
         #[cfg(feature = "server")]
         OClockCommand::Server => oclock::server::handler::server(),

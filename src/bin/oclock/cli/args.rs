@@ -24,11 +24,11 @@ pub enum OClockCommand {
 #[derive(Args, Debug)]
 pub struct ClientArgs {
     #[clap(subcommand)]
-    pub command: OClockClientCommand,
+    pub command: OClockClientCommandArg,
 }
 
 #[derive(Subcommand, Debug)]
-pub enum OClockClientCommand {
+pub enum OClockClientCommandArg {
     /// Terminate the server instance
     Exit,
     /// Create a new task
@@ -80,21 +80,22 @@ pub enum OClockClientCommand {
     Timesheet,
 }
 
-impl ToString for OClockClientCommand {
-    fn to_string(&self) -> String {
-        match self {
-            OClockClientCommand::Exit => String::from("EXIT"),
-            OClockClientCommand::PushTask { name } => format!("PUSH_TASK#{}", name),
-            OClockClientCommand::DisableTask { task_id } => format!("DISABLE_TASK#{}", task_id),
-            OClockClientCommand::SwitchTask { task_id } => format!("SWITCH_TASK#{}", task_id),
-            OClockClientCommand::CurrentTask => String::from("CURRENT_TASK"),
-            OClockClientCommand::ListTasks => String::from("LIST_TASKS"),
-            OClockClientCommand::JsonPushTask { name } => format!("JSON_PUSH_TASK#{}", name),
-            OClockClientCommand::JsonDisableTask { task_id } => format!("JSON_DISABLE_TASK#{}", task_id),
-            OClockClientCommand::JsonSwitchTask { task_id } => format!("JSON_SWITCH_TASK#{}", task_id),
-            OClockClientCommand::JsonRetroSwitchTask { task_id, timestamp, keep_previous_task } => format!("JSON_RETRO_SWITCH_TASK#{task_id}#{timestamp}#{}", if *keep_previous_task { 1 } else { 0 }),
-            OClockClientCommand::JsonState => String::from("JSON_STATE"),
-            OClockClientCommand::Timesheet => String::from("TIMESHEET"),
+#[cfg(feature = "api")]
+impl From<OClockClientCommandArg> for oclock::dto::command::OClockClientCommand {
+    fn from(value: OClockClientCommandArg) -> Self {
+        match value {
+            OClockClientCommandArg::Exit => Self::Exit,
+            OClockClientCommandArg::PushTask { name } => Self::PushTask { name },
+            OClockClientCommandArg::DisableTask { task_id } => Self::DisableTask { task_id },
+            OClockClientCommandArg::SwitchTask { task_id } => Self::SwitchTask { task_id },
+            OClockClientCommandArg::CurrentTask => Self::CurrentTask,
+            OClockClientCommandArg::ListTasks => Self::ListTasks,
+            OClockClientCommandArg::JsonPushTask { name } => Self::JsonPushTask { name },
+            OClockClientCommandArg::JsonDisableTask { task_id } => Self::JsonDisableTask { task_id },
+            OClockClientCommandArg::JsonSwitchTask { task_id } => Self::JsonSwitchTask { task_id },
+            OClockClientCommandArg::JsonRetroSwitchTask { task_id, timestamp, keep_previous_task } => Self::JsonRetroSwitchTask { task_id, timestamp, keep_previous_task },
+            OClockClientCommandArg::JsonState => Self::JsonState,
+            OClockClientCommandArg::Timesheet => Self::Timesheet,
         }
     }
 }

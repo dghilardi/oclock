@@ -3,3 +3,5 @@ pub mod core;
 pub mod server;
 #[cfg(feature = "client")]
 pub mod client;
+#[cfg(feature = "api")]
+pub mod dto;
