@@ -19,10 +19,10 @@ use schedule::{Agenda, Job};
 use serde;
 use serde_json;
 
-use crate::core::server::constants::Commands;
-use crate::core::server::state::{State, TimesheetPivotRecord};
+use crate::server::constants::Commands;
+use crate::server::state::{State, TimesheetPivotRecord};
 
-pub const SERVER_URL: &str = "ipc:///tmp/time-monitor.ipc";
+
 
 pub const SEP: &str = "#";
 
@@ -223,7 +223,7 @@ fn nanomsg_listen(socket: &mut Socket, state: &State) -> MsgListenerStatus {
 
 pub fn server() {
     let mut nanomsg_socket = Socket::new(Protocol::Rep0).unwrap();
-    nanomsg_socket.listen(SERVER_URL).unwrap();
+    nanomsg_socket.listen(crate::core::constants::SERVER_URL).unwrap();
     let (command_tx, command_rx): (Sender<MsgListenerStatus>, Receiver<MsgListenerStatus>) = mpsc::channel();
 
     let cfg_path = 

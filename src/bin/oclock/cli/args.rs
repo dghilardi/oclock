@@ -13,8 +13,10 @@ pub struct OClockArgs {
 
 #[derive(Subcommand, Debug)]
 pub enum OClockCommand {
+    #[cfg(feature = "server")]
     /// Launch oclock in server mode
     Server,
+    #[cfg(feature = "client")]
     /// Launch oclock in client mode
     Client(ClientArgs)
 }
@@ -91,7 +93,7 @@ impl ToString for OClockClientCommand {
             OClockClientCommand::JsonDisableTask { task_id } => format!("JSON_DISABLE_TASK#{}", task_id),
             OClockClientCommand::JsonSwitchTask { task_id } => format!("JSON_SWITCH_TASK#{}", task_id),
             OClockClientCommand::JsonRetroSwitchTask { task_id, timestamp, keep_previous_task } => format!("JSON_RETRO_SWITCH_TASK#{task_id}#{timestamp}#{}", if *keep_previous_task { 1 } else { 0 }),
-            OClockClientCommand::JsonState => format!("JSON_STATE#{}", serde_json::to_string(&()).expect("Error serializing JsonState args")),
+            OClockClientCommand::JsonState => String::from("JSON_STATE"),
             OClockClientCommand::Timesheet => String::from("TIMESHEET"),
         }
     }
