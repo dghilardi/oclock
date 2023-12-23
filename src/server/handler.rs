@@ -13,6 +13,7 @@ use std::time::Duration;
 use csv::Writer;
 use nng;
 use nng::{Protocol, Socket};
+use nng::options::{Options, RecvTimeout, SendTimeout};
 use oclock_sqlite::constants::SystemEventType;
 use schedule::{Agenda, Job};
 use serde;
@@ -177,6 +178,10 @@ fn nanomsg_listen(socket: &mut Socket, state: &State) -> MsgListenerStatus {
             log::debug!("No message received");
             MsgListenerStatus::Continue
         }
+        Err(nng::Error::TimedOut) => {
+            log::debug!("No message received");
+            MsgListenerStatus::Continue
+        }
         Err(err) => {
             log::error!("Server failed to receive request '{}'.", err);
             MsgListenerStatus::Continue
@@ -186,6 +191,9 @@ fn nanomsg_listen(socket: &mut Socket, state: &State) -> MsgListenerStatus {
 
 pub fn server() {
     let mut nanomsg_socket = Socket::new(Protocol::Rep0).unwrap();
+    nanomsg_socket.set_opt::<SendTimeout>(Some(Duration::from_millis(500))).expect("Error setting SendTimeout opt");
+    nanomsg_socket.set_opt::<RecvTimeout>(Some(Duration::from_millis(5000))).expect("Error setting RecvTimeout opt");
+
     nanomsg_socket.listen(crate::core::constants::SERVER_URL).unwrap();
     let (command_tx, command_rx): (Sender<MsgListenerStatus>, Receiver<MsgListenerStatus>) = mpsc::channel();
 
