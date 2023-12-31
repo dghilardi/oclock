@@ -12,7 +12,13 @@ fn main() {
     match args.subcommand {
         #[cfg(feature = "client")]
         OClockCommand::Client(client_args) => {
-            error_state = oclock::client::handler::send_command(client_args.command.into())
+            let reply = oclock::client::handler::invoke_server::<oclock::dto::command::OClockClientCommand, serde_json::Value>(client_args.command.into());
+            match &reply {
+                Ok(serde_json::Value::String(msg)) => println!("{msg}"),
+                Ok(rep) => println!("{}", serde_json::to_string(rep).expect("Error serializing reply")),
+                Err(err) => eprintln!("{err}"),
+            }
+            error_state = reply.is_ok();
         },
         #[cfg(feature = "server")]
         OClockCommand::Server => oclock::server::handler::server(),

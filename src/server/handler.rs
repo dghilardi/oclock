@@ -79,28 +79,28 @@ fn timesheet_to_csv(tasks: Vec<String>, records: Vec<TimesheetPivotRecord>) -> R
     Ok(data)
 }
 
-fn compute_state(state: &State) -> Result<String, String> {
+fn compute_state(state: &State) -> Result<serde_json::Value, String> {
     let exp_state = state.get_state()?;
-    match serde_json::to_string(&exp_state) {
+    match serde_json::to_value(&exp_state) {
         Ok(json) => Ok(json),
         Err(e) => Err(format!("Error serializing state {}", e))
     }
 }
 
-fn handle_msg(msg: OClockClientCommand, state: &State) -> Result<String, String> {
+fn handle_msg(msg: OClockClientCommand, state: &State) -> Result<serde_json::Value, String> {
     match msg {
-        OClockClientCommand::Exit => Ok(String::from("bye bye...")),
+        OClockClientCommand::Exit => Ok(serde_json::Value::String(String::from("bye bye..."))),
         OClockClientCommand::CurrentTask => {
             let task = state.get_current_task()?;
             match task {
-                Some(t) => Ok(t.name),
-                None => Ok("None".to_string())
+                Some(t) => Ok(serde_json::Value::String(t.name)),
+                None => Ok(serde_json::Value::String(String::from("None")))
             }
         }
         OClockClientCommand::ListTasks => {
             let tasks = state.list_tasks()?;
             match vec_to_csv(tasks) {
-                Ok(csv) => Ok(csv),
+                Ok(csv) => Ok(serde_json::Value::String(csv)),
                 Err(e) => Err(format!("Error generating csv '{}'", e))
             }
         }
@@ -108,7 +108,7 @@ fn handle_msg(msg: OClockClientCommand, state: &State) -> Result<String, String>
             let (tasks, timesheet) = state.full_timesheet()?;
 
             match timesheet_to_csv(tasks, timesheet) {
-                Ok(csv) => Ok(csv),
+                Ok(csv) => Ok(serde_json::Value::String(csv)),
                 Err(e) => Err(format!("Error generating csv '{}'", e)),
             }
         }

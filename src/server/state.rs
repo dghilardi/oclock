@@ -66,7 +66,7 @@ impl State {
         }
     }
 
-    pub fn new_task(&self, name: String) -> Result<String, String> {
+    pub fn new_task(&self, name: String) -> Result<serde_json::Value, String> {
 
         let new_task = NewTask {
             name
@@ -75,12 +75,12 @@ impl State {
         let mut connection = self.database.establish_connection();
 
         match mappers::tasks::create_task(&mut connection, &new_task) {
-            Ok(task_id) => Result::Ok(format!("New task id '{}'", task_id)),
+            Ok(task_id) => Result::Ok(serde_json::Value::String(format!("New task id '{}'", task_id))),
             Err(err) => Result::Err(format!("Error during task insert '{}'", err)),
         }
     }
 
-    pub fn switch_task(&self, id: u64) -> Result<String, String> {
+    pub fn switch_task(&self, id: u64) -> Result<serde_json::Value, String> {
         let unix_now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
         let mut connection = self.database.establish_connection();
@@ -92,7 +92,7 @@ impl State {
         };
 
         match mappers::events::push_event(&mut connection, &event) {
-            Ok(evt_id) => Result::Ok(format!("New event id '{}'", evt_id)),
+            Ok(evt_id) => Result::Ok(serde_json::Value::String(format!("New event id '{}'", evt_id))),
             Err(err) => Result::Err(format!("Error during task switch '{}'", err)),
         }
     }
@@ -180,10 +180,10 @@ impl State {
         }
     }
 
-    pub fn change_task_enabled_flag(&self, id: u64, enabled: bool) -> Result<String, String> {
+    pub fn change_task_enabled_flag(&self, id: u64, enabled: bool) -> Result<serde_json::Value, String> {
         let mut connection = self.database.establish_connection();
         match mappers::tasks::change_enabled(&mut connection, id as i32, enabled) {
-            Ok(_) => Ok(format!("Task {} enabled: {}", id, enabled)),
+            Ok(_) => Ok(serde_json::Value::String(format!("Task {} enabled: {}", id, enabled))),
             Err(e) => Err(format!("Error switching task enabled flag: '{}'", e))
         }
     }

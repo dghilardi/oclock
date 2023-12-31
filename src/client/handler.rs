@@ -1,44 +1,59 @@
 use nng::{Protocol, Socket};
-use crate::dto::command::OClockClientCommand;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+use thiserror::Error;
 
-pub fn send_command(command: OClockClientCommand) -> bool {
-    let socket = Socket::new(Protocol::Req0).unwrap();
-    socket.dial(crate::core::constants::SERVER_URL).unwrap();
+#[derive(Error, Debug)]
+pub enum SrvInvocationError {
+    #[error("Server error - {0}")]
+    ServerError(String),
+    #[error("Communication Error - {0}")]
+    CommunicationError(String),
+}
+pub fn invoke_server<Req, Rep>(req: Req) -> Result<Rep, SrvInvocationError>
+where
+    Req: Serialize,
+    Rep: DeserializeOwned,
+{
+    let socket = Socket::new(Protocol::Req0)
+        .map_err(|err| SrvInvocationError::CommunicationError(format!("Error creating the socket - {err}")))?;
 
-    let mut error_status = false;
+    socket.dial(crate::core::constants::SERVER_URL)
+        .map_err(|err| SrvInvocationError::CommunicationError(format!("Error connecting to the socket - {err}")))?;
 
-    match socket.send(&serde_json::to_vec(&command).expect("Cannot serialize command")) {
-        Ok(..) => log::debug!("Send '{:?}'.", command),
-        Err(err) => log::error!("Client failed to send request '{:?}'.", err)
-    }
+    let serialized_req = serde_json::to_vec(&req)
+        .map_err(|err| SrvInvocationError::CommunicationError(format!("Cannot serialize command - {err}")))?;
 
-    match socket.recv() {
+    socket.send(&serialized_req)
+        .map_err(|(_, err)| SrvInvocationError::CommunicationError(format!("Cannot send request - {err}")))?;
+
+    let out = match socket.recv() {
         Ok(reply) if reply.starts_with(b"OK#") => {
-            log::debug!("Recv '{:?}'.", reply);
+            let msg = std::str::from_utf8(&reply[3..])
+                .map_err(|err| SrvInvocationError::CommunicationError(format!("Malformed reply String - {err}")))?;
 
-            let msg = std::str::from_utf8(&reply)
-                .expect("Error deserializing response")
-                .replace("OK#","");
-
-            println!("{}", msg);
+            serde_json::from_str::<Rep>(&msg)
+                .map_err(|err| SrvInvocationError::CommunicationError(format!("Cannot deserialize json - {err}")))
         },
         Ok(reply) if reply.starts_with(b"ERR#") => {
             log::debug!("Recv '{:?}'.", reply);
 
-            let msg = std::str::from_utf8(&reply)
-                .expect("Error deserializing response")
-                .replace("ERR#","");
+            let msg = std::str::from_utf8(&reply[4..])
+                .map_err(|err| SrvInvocationError::CommunicationError(format!("Malformed reply String - {err}")))?;
 
-            eprintln!("{}", msg);
-            error_status = true;
+            Err(SrvInvocationError::ServerError(String::from(msg)))
         },
         Ok(reply) => {
             log::error!("not recognized response {:?}", reply);
-            error_status = true;
+            Err(SrvInvocationError::CommunicationError(String::from("Missing reply prefix")))
         }
-        Err(err) => log::error!("Client failed to receive reply '{}'.", err),
-    }
+        Err(err) => {
+            log::error!("Client failed to receive reply '{}'.", err);
+            Err(SrvInvocationError::CommunicationError(format!("Reply was not received - {err}")))
+        },
+    };
 
     socket.close();
-    error_status
+
+    out
 }
