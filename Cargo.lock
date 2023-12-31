@@ -464,7 +464,7 @@ dependencies = [
 
 [[package]]
 name = "oclock"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "clap",
  "csv",
