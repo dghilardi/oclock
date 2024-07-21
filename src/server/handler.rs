@@ -4,16 +4,16 @@ use std::env;
 use std::error::Error;
 use std::fs;
 use std::str;
-use std::sync::{Arc, mpsc};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender, TryRecvError};
+use std::sync::{mpsc, Arc};
 use std::thread;
 use std::time::Duration;
 
 use csv::Writer;
 use nng;
-use nng::{Protocol, Socket};
 use nng::options::{Options, RecvTimeout, SendTimeout};
+use nng::{Protocol, Socket};
 use oclock_sqlite::constants::SystemEventType;
 use schedule::{Agenda, Job};
 use serde;
@@ -30,8 +30,9 @@ enum MsgListenerStatus {
     Fail,
 }
 
-fn vec_to_csv<T>(items: Vec<T>) -> Result<String, Box<dyn Error>> where
-    T: serde::ser::Serialize
+fn vec_to_csv<T>(items: Vec<T>) -> Result<String, Box<dyn Error>>
+where
+    T: serde::ser::Serialize,
 {
     let mut wtr = Writer::from_writer(vec![]);
     for item in items {
@@ -56,19 +57,25 @@ fn test_time_format() {
 }
 
 fn format_time_interval(i: &i32) -> String {
-    format!("{:02}:{:02}:{:02}", i / 3600, (i - (i / 3600) * 3600) / 60, i - (i / 60) * 60)
+    format!(
+        "{:02}:{:02}:{:02}",
+        i / 3600,
+        (i - (i / 3600) * 3600) / 60,
+        i - (i / 60) * 60
+    )
 }
 
-fn timesheet_to_csv(tasks: Vec<String>, records: Vec<TimesheetPivotRecord>) -> Result<String, Box<dyn Error>> {
+fn timesheet_to_csv(
+    tasks: Vec<String>,
+    records: Vec<TimesheetPivotRecord>,
+) -> Result<String, Box<dyn Error>> {
     let mut wtr = Writer::from_writer(vec![]);
     let out = wtr.serialize(("day", tasks));
     if let Err(err) = out {
         log::warn!("Error serializing tasks - {err}");
     }
     for item in records {
-        let entries_str: Vec<String> = item.entries.iter()
-            .map(format_time_interval)
-            .collect();
+        let entries_str: Vec<String> = item.entries.iter().map(format_time_interval).collect();
         let out = wtr.serialize((item.day, entries_str));
         if let Err(err) = out {
             log::warn!("Error serializing day entries - {err}");
@@ -83,7 +90,7 @@ fn compute_state(state: &State) -> Result<serde_json::Value, String> {
     let exp_state = state.get_state()?;
     match serde_json::to_value(&exp_state) {
         Ok(json) => Ok(json),
-        Err(e) => Err(format!("Error serializing state {}", e))
+        Err(e) => Err(format!("Error serializing state {}", e)),
     }
 }
 
@@ -94,14 +101,14 @@ fn handle_msg(msg: OClockClientCommand, state: &State) -> Result<serde_json::Val
             let task = state.get_current_task()?;
             match task {
                 Some(t) => Ok(serde_json::Value::String(t.name)),
-                None => Ok(serde_json::Value::String(String::from("None")))
+                None => Ok(serde_json::Value::String(String::from("None"))),
             }
         }
         OClockClientCommand::ListTasks => {
             let tasks = state.list_tasks()?;
             match vec_to_csv(tasks) {
                 Ok(csv) => Ok(serde_json::Value::String(csv)),
-                Err(e) => Err(format!("Error generating csv '{}'", e))
+                Err(e) => Err(format!("Error generating csv '{}'", e)),
             }
         }
         OClockClientCommand::Timesheet => {
@@ -113,7 +120,9 @@ fn handle_msg(msg: OClockClientCommand, state: &State) -> Result<serde_json::Val
             }
         }
         OClockClientCommand::PushTask { name } => state.new_task(name),
-        OClockClientCommand::DisableTask { task_id } => state.change_task_enabled_flag(task_id, false),
+        OClockClientCommand::DisableTask { task_id } => {
+            state.change_task_enabled_flag(task_id, false)
+        }
         OClockClientCommand::SwitchTask { task_id } => state.switch_task(task_id),
         OClockClientCommand::JsonPushTask { name } => {
             state.new_task(name)?;
@@ -130,13 +139,15 @@ fn handle_msg(msg: OClockClientCommand, state: &State) -> Result<serde_json::Val
             state.switch_task(task_id)?;
             compute_state(state)
         }
-        OClockClientCommand::JsonRetroSwitchTask { task_id, timestamp, keep_previous_task } => {
+        OClockClientCommand::JsonRetroSwitchTask {
+            task_id,
+            timestamp,
+            keep_previous_task,
+        } => {
             state.retro_switch_task(task_id as i32, timestamp as i32, keep_previous_task)?;
             compute_state(state)
         }
-        OClockClientCommand::JsonState => {
-            compute_state(state)
-        }
+        OClockClientCommand::JsonState => compute_state(state),
     }
 }
 
@@ -150,20 +161,18 @@ fn nanomsg_listen(socket: &mut Socket, state: &State) -> MsgListenerStatus {
                 Err(_) => MsgListenerStatus::Fail,
             };
 
-            let cmd_outcome =
-                match message_str {
-                    Ok(msg) => handle_msg(msg, state),
-                    Err(e) => {
-                        log::error!("Invalid message received: {}", e);
-                        Err(String::from("Invalid message"))
-                    }
-                };
+            let cmd_outcome = match message_str {
+                Ok(msg) => handle_msg(msg, state),
+                Err(e) => {
+                    log::error!("Invalid message received: {}", e);
+                    Err(String::from("Invalid message"))
+                }
+            };
 
-            let reply =
-                match cmd_outcome {
-                    Ok(msg) => format!("OK#{}", msg),
-                    Err(msg) => format!("ERR#{}", msg),
-                };
+            let reply = match cmd_outcome {
+                Ok(msg) => format!("OK#{}", msg),
+                Err(msg) => format!("ERR#{}", msg),
+            };
 
             match socket.send(reply.as_bytes()) {
                 Ok(..) => println!("Sent '{}'.", reply),
@@ -191,17 +200,23 @@ fn nanomsg_listen(socket: &mut Socket, state: &State) -> MsgListenerStatus {
 
 pub fn server() {
     let mut nanomsg_socket = Socket::new(Protocol::Rep0).unwrap();
-    nanomsg_socket.set_opt::<SendTimeout>(Some(Duration::from_millis(500))).expect("Error setting SendTimeout opt");
-    nanomsg_socket.set_opt::<RecvTimeout>(Some(Duration::from_millis(5000))).expect("Error setting RecvTimeout opt");
+    nanomsg_socket
+        .set_opt::<SendTimeout>(Some(Duration::from_millis(500)))
+        .expect("Error setting SendTimeout opt");
+    nanomsg_socket
+        .set_opt::<RecvTimeout>(Some(Duration::from_millis(5000)))
+        .expect("Error setting RecvTimeout opt");
 
-    nanomsg_socket.listen(crate::core::constants::SERVER_URL).unwrap();
-    let (command_tx, command_rx): (Sender<MsgListenerStatus>, Receiver<MsgListenerStatus>) = mpsc::channel();
+    nanomsg_socket
+        .listen(crate::core::constants::SERVER_URL)
+        .unwrap();
+    let (command_tx, command_rx): (Sender<MsgListenerStatus>, Receiver<MsgListenerStatus>) =
+        mpsc::channel();
 
-    let cfg_path =
-        match env::var("HOME") {
-            Ok(path) => format!("{}/.oclock", path),
-            Err(_) => ".".to_string()
-        };
+    let cfg_path = match env::var("HOME") {
+        Ok(path) => format!("{}/.oclock", path),
+        Err(_) => ".".to_string(),
+    };
 
     fs::create_dir_all(&cfg_path).unwrap_or_else(|why| {
         println!("! {:?}", why.kind());
@@ -220,24 +235,31 @@ pub fn server() {
     let mut a = Agenda::new();
 
     // Run every second
-    a.add(Job::new(|| {
-        let daemon_status = nanomsg_listen(&mut nanomsg_socket, &state);
-        let out = command_tx.send(daemon_status);
-        if let Err(err) = out {
-            log::error!("Error sending command in channel - {err}");
-        }
-    }, "* * * * * *".parse().unwrap()));
+    a.add(Job::new(
+        || {
+            let daemon_status = nanomsg_listen(&mut nanomsg_socket, &state);
+            let out = command_tx.send(daemon_status);
+            if let Err(err) = out {
+                log::error!("Error sending command in channel - {err}");
+            }
+        },
+        "* * * * * *".parse().unwrap(),
+    ));
 
     // Run every minute
-    a.add(Job::new(|| {
-        state.ping();
-    }, "0 * * * * *".parse().unwrap()));
+    a.add(Job::new(
+        || {
+            state.ping();
+        },
+        "0 * * * * *".parse().unwrap(),
+    ));
 
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
     ctrlc::set_handler(move || {
         r.store(false, Ordering::SeqCst);
-    }).expect("Error setting Ctrl-C handler");
+    })
+    .expect("Error setting Ctrl-C handler");
 
     // Check and run pending jobs in agenda every 500 milliseconds
     loop {

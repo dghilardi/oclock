@@ -9,10 +9,11 @@ pub fn full_timesheet(conn: &mut SqliteConnection) -> Result<Vec<TimesheetEntry>
     use crate::schema::v_timesheet::dsl::*;
 
     v_timesheet
-    .filter(
-        system_event.eq(SystemEventType::Startup.to_string())
-        .or(system_event.is_null())
-    )
-    .order(day)
-    .load(conn)
+        .filter(
+            system_event
+                .eq(SystemEventType::Startup.to_string())
+                .or(system_event.is_null()),
+        )
+        .order(day)
+        .load(conn)
 }

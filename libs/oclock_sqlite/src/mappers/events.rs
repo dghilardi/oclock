@@ -20,9 +20,7 @@ pub fn push_event(conn: &mut SqliteConnection, task: &NewEvent) -> Result<usize,
 pub fn get_last_event(conn: &mut SqliteConnection) -> Result<Event, Error> {
     use crate::schema::events::dsl::*;
 
-    events
-    .order(event_timestamp.desc())
-    .first(conn)
+    events.order(event_timestamp.desc()).first(conn)
 }
 
 pub fn remove_all_system_events(conn: &mut SqliteConnection, event_name: String) {
@@ -32,7 +30,10 @@ pub fn remove_all_system_events(conn: &mut SqliteConnection, event_name: String)
         .execute(conn)
         .expect(&format!("Error deleting system event {}", event_name));
 
-    debug!("deleted {} system events with type {}", num_deleted, event_name);
+    debug!(
+        "deleted {} system events with type {}",
+        num_deleted, event_name
+    );
 }
 
 pub fn move_system_event(conn: &mut SqliteConnection, unix_ts: i32, event_name: String) {
@@ -46,33 +47,36 @@ pub fn move_system_event(conn: &mut SqliteConnection, unix_ts: i32, event_name: 
 
 pub fn current_task(conn: &mut SqliteConnection) -> Result<Option<Task>, Error> {
     use crate::schema::events::dsl::*;
-    use crate::schema::tasks::dsl::*;
     use crate::schema::tasks::dsl::id;
+    use crate::schema::tasks::dsl::*;
 
     let last_evt_query = events
-    .filter(
-        system_event_name.ne(SystemEventType::Ping.to_string())
-        .or(system_event_name.is_null())
-    )
-    .order(event_timestamp.desc());
+        .filter(
+            system_event_name
+                .ne(SystemEventType::Ping.to_string())
+                .or(system_event_name.is_null()),
+        )
+        .order(event_timestamp.desc());
 
-    debug!("Last event query: {}", diesel::debug_query::<Backend, _>(&last_evt_query));
+    debug!(
+        "Last event query: {}",
+        diesel::debug_query::<Backend, _>(&last_evt_query)
+    );
 
-    let last_evt =
-    last_evt_query
-    .first::<Event>(conn);
+    let last_evt = last_evt_query.first::<Event>(conn);
 
     debug!("Last event: {:?}", last_evt);
 
     match last_evt {
-        Ok(Event{task_id: Some(curr_task_id), ..}) => {
-            let task = tasks
-            .filter(id.eq(curr_task_id))
-            .first(conn)?;
+        Ok(Event {
+            task_id: Some(curr_task_id),
+            ..
+        }) => {
+            let task = tasks.filter(id.eq(curr_task_id)).first(conn)?;
 
             Ok(Some(task))
-            },
-        Ok(Event{task_id: None, ..}) => Ok(None),
-        Err(e) => Err(e)
+        }
+        Ok(Event { task_id: None, .. }) => Ok(None),
+        Err(e) => Err(e),
     }
 }
