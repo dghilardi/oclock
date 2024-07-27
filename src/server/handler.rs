@@ -199,17 +199,21 @@ fn nanomsg_listen(socket: &mut Socket, state: &State) -> MsgListenerStatus {
 }
 
 pub fn server() {
-    let mut nanomsg_socket = Socket::new(Protocol::Rep0).unwrap();
-    nanomsg_socket
+    let mut nanomsg_req_socket = Socket::new(Protocol::Rep0).unwrap();
+    nanomsg_req_socket
         .set_opt::<SendTimeout>(Some(Duration::from_millis(500)))
         .expect("Error setting SendTimeout opt");
-    nanomsg_socket
+    nanomsg_req_socket
         .set_opt::<RecvTimeout>(Some(Duration::from_millis(5000)))
         .expect("Error setting RecvTimeout opt");
 
-    nanomsg_socket
-        .listen(crate::core::constants::SERVER_URL)
+    nanomsg_req_socket
+        .listen(crate::core::constants::SERVER_REQ_URL)
         .unwrap();
+
+    let nanomsg_sub_socket = Socket::new(Protocol::Pub0).unwrap();
+
+
     let (command_tx, command_rx): (Sender<MsgListenerStatus>, Receiver<MsgListenerStatus>) =
         mpsc::channel();
 
@@ -237,7 +241,7 @@ pub fn server() {
     // Run every second
     a.add(Job::new(
         || {
-            let daemon_status = nanomsg_listen(&mut nanomsg_socket, &state);
+            let daemon_status = nanomsg_listen(&mut nanomsg_req_socket, &state);
             let out = command_tx.send(daemon_status);
             if let Err(err) = out {
                 log::error!("Error sending command in channel - {err}");

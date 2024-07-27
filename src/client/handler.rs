@@ -16,11 +16,15 @@ where
     Rep: DeserializeOwned,
 {
     let socket = Socket::new(Protocol::Req0).map_err(|err| {
-        SrvInvocationError::CommunicationError(format!("Error creating the socket - {err}"))
+        SrvInvocationError::CommunicationError(format!("Error creating the req/rep socket - {err}"))
+    })?;
+
+    let pub_socket = Socket::new(Protocol::Pub0).map_err(|err| {
+        SrvInvocationError::CommunicationError(format!("Error creating the pub/sub socket - {err}"))
     })?;
 
     socket
-        .dial(crate::core::constants::SERVER_URL)
+        .dial(crate::core::constants::SERVER_REQ_URL)
         .map_err(|err| {
             SrvInvocationError::CommunicationError(format!(
                 "Error connecting to the socket - {err}"
