@@ -1,7 +1,7 @@
 [package]
 edition = "2021"
 name = "oclock"
-version = "0.1.10"
+version = "0.1.11"
 
 authors = ["Davide Ghilardi <dghila@d71.dev>"]
 description = "Time tracking utility"
