@@ -17,8 +17,9 @@ use nng::{Protocol, Socket};
 use oclock_sqlite::constants::SystemEventType;
 use schedule::{Agenda, Job};
 use serde;
+use serde::Serialize;
 use serde_json;
-
+use crate::core::constants::SERVER_SUB_URL;
 use crate::dto::command::OClockClientCommand;
 use crate::server::state::{State, TimesheetPivotRecord};
 
@@ -94,7 +95,15 @@ fn compute_state(state: &State) -> Result<serde_json::Value, String> {
     }
 }
 
-fn handle_msg(msg: OClockClientCommand, state: &State) -> Result<serde_json::Value, String> {
+fn pub_state(state: &impl Serialize, sub_socket: &mut Socket) {
+    log::info!("Sending state update");
+    let out = sub_socket.send(&serde_json::to_vec(state).expect("error serializing state"));
+    if let Err(err) = out {
+        log::error!("Error publishing state - {err:?}");
+    }
+}
+
+fn handle_msg(msg: OClockClientCommand, state: &State, pub_socket: &mut Socket) -> Result<serde_json::Value, String> {
     match msg {
         OClockClientCommand::Exit => Ok(serde_json::Value::String(String::from("bye bye..."))),
         OClockClientCommand::CurrentTask => {
@@ -119,25 +128,53 @@ fn handle_msg(msg: OClockClientCommand, state: &State) -> Result<serde_json::Val
                 Err(e) => Err(format!("Error generating csv '{}'", e)),
             }
         }
-        OClockClientCommand::PushTask { name } => state.new_task(name),
+        OClockClientCommand::PushTask { name } => {
+            let result = state.new_task(name);
+            if let Ok(state) = compute_state(state) {
+                pub_state(&state, pub_socket);
+            }
+            result
+        },
         OClockClientCommand::DisableTask { task_id } => {
-            state.change_task_enabled_flag(task_id, false)
+            let result = state.change_task_enabled_flag(task_id, false);
+            if let Ok(state) = compute_state(state) {
+                pub_state(&state, pub_socket);
+            }
+            result
         }
-        OClockClientCommand::SwitchTask { task_id } => state.switch_task(task_id),
+        OClockClientCommand::SwitchTask { task_id } => {
+            let result = state.switch_task(task_id);
+            if let Ok(state) = compute_state(&state) {
+                pub_state(&state, pub_socket);
+            }
+            result
+        },
         OClockClientCommand::JsonPushTask { name } => {
             state.new_task(name)?;
-            compute_state(state)
+            let state = compute_state(state);
+            if let Ok(state) = &state {
+                pub_state(state, pub_socket);
+            }
+            state
         }
         OClockClientCommand::JsonDisableTask { task_id } => {
             let out = state.change_task_enabled_flag(task_id, false);
             if let Err(err) = out {
                 log::warn!("Error disabling task {task_id} - {err}");
             }
-            compute_state(state)
+            let state = compute_state(state);
+            if let Ok(state) = &state {
+                pub_state(state, pub_socket);
+            }
+            state
         }
         OClockClientCommand::JsonSwitchTask { task_id } => {
             state.switch_task(task_id)?;
-            compute_state(state)
+            let state = compute_state(state);
+            if let Ok(state) = &state {
+                pub_state(state, pub_socket);
+            }
+            state
         }
         OClockClientCommand::JsonRetroSwitchTask {
             task_id,
@@ -145,13 +182,17 @@ fn handle_msg(msg: OClockClientCommand, state: &State) -> Result<serde_json::Val
             keep_previous_task,
         } => {
             state.retro_switch_task(task_id as i32, timestamp as i32, keep_previous_task)?;
-            compute_state(state)
+            let state = compute_state(state);
+            if let Ok(state) = &state {
+                pub_state(state, pub_socket);
+            }
+            state
         }
         OClockClientCommand::JsonState => compute_state(state),
     }
 }
 
-fn nanomsg_listen(socket: &mut Socket, state: &State) -> MsgListenerStatus {
+fn nanomsg_listen(socket: &mut Socket, pub_socket: &mut Socket, state: &State) -> MsgListenerStatus {
     match socket.recv() {
         Ok(message) => {
             let message_str = serde_json::from_slice(&message);
@@ -162,7 +203,7 @@ fn nanomsg_listen(socket: &mut Socket, state: &State) -> MsgListenerStatus {
             };
 
             let cmd_outcome = match message_str {
-                Ok(msg) => handle_msg(msg, state),
+                Ok(msg) => handle_msg(msg, state, pub_socket),
                 Err(e) => {
                     log::error!("Invalid message received: {}", e);
                     Err(String::from("Invalid message"))
@@ -211,7 +252,11 @@ pub fn server() {
         .listen(crate::core::constants::SERVER_REQ_URL)
         .unwrap();
 
-    let nanomsg_sub_socket = Socket::new(Protocol::Pub0).unwrap();
+    let mut nanomsg_sub_socket = Socket::new(Protocol::Pub0).unwrap();
+
+    nanomsg_sub_socket
+        .listen(SERVER_SUB_URL)
+        .expect("Error listening sub socket");
 
 
     let (command_tx, command_rx): (Sender<MsgListenerStatus>, Receiver<MsgListenerStatus>) =
@@ -241,7 +286,7 @@ pub fn server() {
     // Run every second
     a.add(Job::new(
         || {
-            let daemon_status = nanomsg_listen(&mut nanomsg_req_socket, &state);
+            let daemon_status = nanomsg_listen(&mut nanomsg_req_socket, &mut nanomsg_sub_socket, &state);
             let out = command_tx.send(daemon_status);
             if let Err(err) = out {
                 log::error!("Error sending command in channel - {err}");
