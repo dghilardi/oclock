@@ -1,7 +1,8 @@
-use nng::{Protocol, Socket};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use thiserror::Error;
+use zenoh::{Config, Wait};
+use crate::core::constants::SERVER_REQ_URL;
 
 #[derive(Error, Debug)]
 pub enum SrvInvocationError {
@@ -10,64 +11,66 @@ pub enum SrvInvocationError {
     #[error("Communication Error - {0}")]
     CommunicationError(String),
 }
+
 pub fn invoke_server<Req, Rep>(req: Req) -> Result<Rep, SrvInvocationError>
 where
     Req: Serialize,
     Rep: DeserializeOwned,
 {
-    let socket = Socket::new(Protocol::Req0).map_err(|err| {
-        SrvInvocationError::CommunicationError(format!("Error creating the req/rep socket - {err}"))
+    let config = Config::default();
+    let session = zenoh::open(config).wait().map_err(|err| {
+        SrvInvocationError::CommunicationError(format!("Error creating zenoh session - {err}"))
     })?;
-
-    let _pub_socket = Socket::new(Protocol::Pub0).map_err(|err| {
-        SrvInvocationError::CommunicationError(format!("Error creating the pub/sub socket - {err}"))
-    })?;
-
-    socket
-        .dial(crate::core::constants::SERVER_REQ_URL)
-        .map_err(|err| {
-            SrvInvocationError::CommunicationError(format!(
-                "Error connecting to the socket - {err}"
-            ))
-        })?;
 
     let serialized_req = serde_json::to_vec(&req).map_err(|err| {
         SrvInvocationError::CommunicationError(format!("Cannot serialize command - {err}"))
     })?;
 
-    socket.send(&serialized_req).map_err(|(_, err)| {
-        SrvInvocationError::CommunicationError(format!("Cannot send request - {err}"))
-    })?;
+    let receiver = session
+        .get(SERVER_REQ_URL)
+        .payload(serialized_req)
+        .wait()
+        .map_err(|err| {
+            SrvInvocationError::CommunicationError(format!("Cannot send request - {err}"))
+        })?;
 
-    let out = match socket.recv() {
-        Ok(reply) if reply.starts_with(b"OK#") => {
-            let msg = std::str::from_utf8(&reply[3..]).map_err(|err| {
-                SrvInvocationError::CommunicationError(format!("Malformed reply String - {err}"))
-            })?;
-
-            let res = serde_json::from_str::<Rep>(&msg).map_err(|err| {
-                SrvInvocationError::CommunicationError(format!("Cannot deserialize json - {err}"))
-            });
-
-            if let Err(err) = &res {
-                log::error!("Error deserializing '{msg}' - {err}");
-            }
-            res
-        }
-        Ok(reply) if reply.starts_with(b"ERR#") => {
-            log::debug!("Recv '{:?}'.", reply);
-
-            let msg = std::str::from_utf8(&reply[4..]).map_err(|err| {
-                SrvInvocationError::CommunicationError(format!("Malformed reply String - {err}"))
-            })?;
-
-            Err(SrvInvocationError::ServerError(String::from(msg)))
-        }
+    match receiver.recv() {
         Ok(reply) => {
-            log::error!("not recognized response {:?}", reply);
-            Err(SrvInvocationError::CommunicationError(String::from(
-                "Missing reply prefix",
-            )))
+            match reply.result() {
+                Ok(sample) => {
+                    let payload = sample.payload().to_bytes();
+                    if payload.starts_with(b"OK#") {
+                        let msg = std::str::from_utf8(&payload[3..]).map_err(|err| {
+                            SrvInvocationError::CommunicationError(format!("Malformed reply String - {err}"))
+                        })?;
+
+                        let res = serde_json::from_str::<Rep>(&msg).map_err(|err| {
+                            SrvInvocationError::CommunicationError(format!("Cannot deserialize json - {err}"))
+                        });
+
+                        if let Err(err) = &res {
+                            log::error!("Error deserializing '{msg}' - {err}");
+                        }
+                        res
+                    } else if payload.starts_with(b"ERR#") {
+                        log::debug!("Recv '{:?}'.", payload);
+
+                        let msg = std::str::from_utf8(&payload[4..]).map_err(|err| {
+                            SrvInvocationError::CommunicationError(format!("Malformed reply String - {err}"))
+                        })?;
+
+                        Err(SrvInvocationError::ServerError(String::from(msg)))
+                    } else {
+                        log::error!("not recognized response {:?}", payload);
+                        Err(SrvInvocationError::CommunicationError(String::from(
+                            "Missing reply prefix",
+                        )))
+                    }
+                }
+                Err(val) => {
+                    Err(SrvInvocationError::CommunicationError(format!("Value error: {:?}", val)))
+                }
+            }
         }
         Err(err) => {
             log::error!("Client failed to receive reply '{}'.", err);
@@ -75,9 +78,5 @@ where
                 "Reply was not received - {err}"
             )))
         }
-    };
-
-    socket.close();
-
-    out
+    }
 }
