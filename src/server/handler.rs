@@ -1,5 +1,3 @@
-extern crate ctrlc;
-
 use std::env;
 use std::error::Error;
 use std::fs;
@@ -11,14 +9,11 @@ use std::thread;
 use std::time::Duration;
 
 use csv::Writer;
-use nng;
 use nng::options::{Options, RecvTimeout, SendTimeout};
 use nng::{Protocol, Socket};
 use oclock_sqlite::constants::SystemEventType;
 use schedule::{Agenda, Job};
-use serde;
 use serde::Serialize;
-use serde_json;
 use crate::core::constants::SERVER_SUB_URL;
 use crate::dto::command::OClockClientCommand;
 use crate::server::state::{State, TimesheetPivotRecord};

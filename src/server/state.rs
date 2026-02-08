@@ -154,7 +154,7 @@ impl State {
 
                 let res = v
                     .iter()
-                    .group_by(|vi| vi.day.clone())
+                    .chunk_by(|vi| vi.day.clone())
                     .into_iter()
                     .map(|(day, records)| {
                         let day_tasks: Vec<&TimesheetEntry> = records.collect();

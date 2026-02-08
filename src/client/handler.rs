@@ -19,7 +19,7 @@ where
         SrvInvocationError::CommunicationError(format!("Error creating the req/rep socket - {err}"))
     })?;
 
-    let pub_socket = Socket::new(Protocol::Pub0).map_err(|err| {
+    let _pub_socket = Socket::new(Protocol::Pub0).map_err(|err| {
         SrvInvocationError::CommunicationError(format!("Error creating the pub/sub socket - {err}"))
     })?;
 

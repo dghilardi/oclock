@@ -1,5 +1,5 @@
 [package]
-edition = "2021"
+edition = "2024"
 name = "oclock_sqlite"
 version = "0.1.5"
 
@@ -13,7 +13,7 @@ readme = "../../README.md"
 [dependencies]
 log = "0.4"
 
-diesel = { version = "2.1", features = ["sqlite"] }
-diesel_migrations = { version = "2.1", features = ["sqlite"] }
+diesel = { version = "2.3", features = ["sqlite"] }
+diesel_migrations = { version = "2.3", features = ["sqlite"] }
 
 serde = { version ="1.0", features = ["derive"] }

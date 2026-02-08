@@ -1,8 +1,3 @@
-#[macro_use]
-extern crate diesel;
-#[macro_use]
-extern crate diesel_migrations;
-
 pub mod constants;
 pub mod mappers;
 pub mod models;

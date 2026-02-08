@@ -1,4 +1,4 @@
-table! {
+diesel::table! {
     events (id) {
         id -> Integer,
         event_timestamp -> Integer,
@@ -7,7 +7,7 @@ table! {
     }
 }
 
-table! {
+diesel::table! {
     tasks (id) {
         id -> Integer,
         enabled -> Integer,
@@ -15,9 +15,9 @@ table! {
     }
 }
 
-joinable!(events -> tasks (task_id));
+diesel::joinable!(events -> tasks (task_id));
 
-table! {
+diesel::table! {
     v_timesheet (id) {
         id -> Integer,
         day -> Text,

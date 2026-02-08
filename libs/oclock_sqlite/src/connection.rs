@@ -6,7 +6,7 @@ use diesel::Connection;
 use diesel_migrations::EmbeddedMigrations;
 use diesel_migrations::MigrationHarness;
 
-pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
+pub const MIGRATIONS: EmbeddedMigrations = diesel_migrations::embed_migrations!();
 
 pub struct DB {
     connection_string: String,
