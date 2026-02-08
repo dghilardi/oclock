@@ -45,47 +45,55 @@ The idle detector will be a trait with platform-specific implementations, select
 
 ### Communication with daemon: oclock library
 
+The UI crates live inside the oclock workspace, so they reference the root crate as a path dependency:
+
 ```toml
 [dependencies]
-oclock = { path = "../oclock", features = ["client", "api"] }
+oclock = { path = "../..", features = ["client", "api"] }
 ```
 
 - **Commands**: call `oclock::client::handler::invoke_server()` from a background thread (it blocks on NNG sockets).
 - **Subscriptions**: connect to the PUB socket (`ipc:///tmp/time-monitor-sub.ipc`) via NNG `Sub0` in a dedicated thread, forward messages as Iced `Subscription` events.
 - **Initial state**: fetch via `JsonState` command on startup, then keep in sync via PUB.
 
+### IPC transport: NNG (with future migration path)
+
+The daemon currently uses NNG (nanomsg-next-generation) for IPC. We keep NNG for now as it is proven and stable. [Zenoh](https://zenoh.io/) is a potential future replacement that offers richer pub/sub semantics, discovery, and better async support. A migration would require daemon-side changes and is out of scope for the initial release.
+
 ## Project structure
 
-The UI is a **separate repository** (not inside the oclock repo) with a Cargo workspace:
+The UI crates live inside the oclock repository as workspace members. This simplifies development: changes to the daemon API and the UI can land in the same commit, and there is a single CI pipeline.
 
 ```
-oclock-ui/
-├── Cargo.toml                  # [workspace]
+oclock/                          # existing repo root
+├── Cargo.toml                   # [workspace] — adds crates/oclock-* members
+├── src/                         # existing daemon + client library
+├── libs/oclock_sqlite/          # existing SQLite layer
 ├── crates/
-│   ├── oclock-bridge/          # Library: daemon communication + state management
+│   ├── oclock-bridge/           # Library: daemon communication + state management
 │   │   ├── Cargo.toml
 │   │   └── src/
 │   │       ├── lib.rs
-│   │       ├── client.rs       # Wraps invoke_server() with async interface
-│   │       ├── subscriber.rs   # PUB socket listener, emits state events
-│   │       └── state.rs        # Cached daemon state, updated by subscriber
+│   │       ├── client.rs        # Wraps invoke_server() with async interface
+│   │       ├── subscriber.rs    # PUB socket listener, emits state events
+│   │       └── state.rs         # Cached daemon state, updated by subscriber
 │   │
-│   ├── oclock-idle/            # Library: idle detection abstraction
+│   ├── oclock-idle/             # Library: idle detection abstraction
 │   │   ├── Cargo.toml
 │   │   └── src/
-│   │       ├── lib.rs          # IdleDetector trait + factory
-│   │       ├── x11.rs          # X11 backend
-│   │       ├── wayland.rs      # ext-idle-notify backend
-│   │       └── gnome_dbus.rs   # GNOME Mutter backend
+│   │       ├── lib.rs           # IdleDetector trait + factory
+│   │       ├── x11.rs           # X11 backend
+│   │       ├── wayland.rs       # ext-idle-notify backend
+│   │       └── gnome_dbus.rs    # GNOME Mutter backend
 │   │
-│   └── oclock-ui/              # Binary: the Iced application
+│   └── oclock-ui/               # Binary: the Iced application
 │       ├── Cargo.toml
 │       └── src/
-│           ├── main.rs         # Entry point, tray icon setup, Iced app launch
-│           ├── app.rs          # Iced Application impl (Message, update, view)
-│           ├── theme.rs        # Colors, task color assignment
-│           ├── config.rs       # XDG config file (task colors, idle threshold, etc.)
-│           ├── tray.rs         # ksni tray icon integration
+│           ├── main.rs          # Entry point, tray icon setup, Iced app launch
+│           ├── app.rs           # Iced Application impl (Message, update, view)
+│           ├── theme.rs         # Colors, task color assignment
+│           ├── config.rs        # XDG config file (task colors, idle threshold, etc.)
+│           ├── tray.rs          # ksni tray icon integration
 │           ├── subscriptions.rs # Iced Subscriptions (daemon state, idle events)
 │           ├── views/
 │           │   ├── mod.rs
@@ -99,10 +107,25 @@ oclock-ui/
 │               └── new_task.rs       # New task dialog (M1)
 │
 ├── assets/
-│   ├── icons/                  # Tray and app icons (SVG)
-│   └── oclock-ui.desktop       # XDG desktop entry for autostart
+│   ├── icons/                   # Tray and app icons (SVG)
+│   └── oclock-ui.desktop        # XDG desktop entry for autostart
 │
-└── README.md
+└── docs/                        # existing docs
+```
+
+### Workspace layout
+
+The root `Cargo.toml` becomes a workspace:
+
+```toml
+[workspace]
+members = [
+    ".",                         # oclock (daemon + client library)
+    "libs/oclock_sqlite",
+    "crates/oclock-bridge",
+    "crates/oclock-idle",
+    "crates/oclock-ui",
+]
 ```
 
 ### Crate dependency graph
@@ -110,9 +133,9 @@ oclock-ui/
 ```
 oclock-ui (bin)
 ├── oclock-bridge (lib)
-│   └── oclock (external, features = ["client", "api"])
+│   └── oclock (workspace member, features = ["client", "api"])
 ├── oclock-idle (lib)
-├── iced
+├── iced 0.14
 └── ksni
 ```
 
@@ -316,11 +339,11 @@ Task colors that are not explicitly configured are auto-assigned from a palette.
 
 ## Key dependencies
 
-| Crate | Purpose | Version (indicative) |
+| Crate | Purpose | Version |
 |---|---|---|
-| `iced` | GUI framework | 0.13+ |
+| `iced` | GUI framework | 0.14.0 |
 | `ksni` | Linux system tray (StatusNotifierItem) | 0.2+ |
-| `oclock` | Daemon communication (library) | 0.1 (path dependency) |
+| `oclock` | Daemon communication (library) | 0.1 (workspace path dependency) |
 | `nng` | PUB socket subscription | 1.0 |
 | `tokio` | Async runtime (for Iced commands) | 1 |
 | `serde` + `toml` | Configuration file | 1.0 / 0.8 |
@@ -330,14 +353,14 @@ Task colors that are not explicitly configured are auto-assigned from a palette.
 | `zbus` | DBus communication (GNOME idle, ksni internals) | 4+ |
 | `chrono` | Date/time formatting | 0.4 |
 
-## Open questions
+## Resolved decisions
 
-1. **Separate repo vs monorepo:** The plan assumes a separate `oclock-ui` repo with a path dependency on oclock. Alternatively, oclock-ui could live inside the oclock repo as a workspace member. Separate repo is cleaner for independent release cycles, but monorepo simplifies development. **Decision needed.**
+1. **Monorepo:** The UI crates live inside the oclock repository as workspace members under `crates/`. This keeps daemon API changes and UI changes in sync and simplifies CI.
 
-2. **Iced version:** Iced 0.13 is the current stable. The API is evolving — we should pin to a specific version and track upstream closely.
+2. **Iced 0.14.0:** Pinned to 0.14.0.
 
-3. **NNG vs alternative IPC:** The daemon uses NNG. If NNG's Rust bindings become unmaintained, switching to Unix domain sockets with a simple framing protocol would be an option, but that requires daemon changes.
+3. **NNG for now, Zenoh later:** We keep NNG as the IPC transport. Zenoh is tracked as a potential future migration for richer pub/sub and better async integration, but is out of scope for the initial release.
 
-4. **Accessibility:** Iced's accessibility story is still maturing. For full keyboard navigation and screen reader support, this may need contributions upstream or workarounds.
+4. **Accessibility:** Iced's accessibility support is maturing. Not a blocker for the initial release; we will revisit as the Iced ecosystem evolves.
 
-5. **Wayland idle detection coverage:** `ext-idle-notify-v1` is not supported by all compositors. Need to verify coverage on common setups (KDE, Sway, Hyprland) and document unsupported ones.
+5. **Wayland idle detection:** `ext-idle-notify-v1` covers KDE, Sway, and Hyprland. GNOME is handled separately via DBus (`org.gnome.Mutter.IdleMonitor`). Compositors without either mechanism will fall back to no idle detection with a logged warning.
