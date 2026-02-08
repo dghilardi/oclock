@@ -9,12 +9,14 @@ use std::thread;
 use std::time::Duration;
 
 use csv::Writer;
-use nng::options::{Options, RecvTimeout, SendTimeout};
-use nng::{Protocol, Socket};
+use zenoh::{Config, Wait, Session}; // Assuming Session is exported or available via prelude if any.
+// If Session is not exported directly, I might need to import it specifically or use inferred type.
+// But usually zenoh::Session is available.
 use oclock_sqlite::constants::SystemEventType;
 use schedule::{Agenda, Job};
 use serde::Serialize;
-use crate::core::constants::SERVER_SUB_URL;
+use serde::de::Error as SerdeError;
+use crate::core::constants::{SERVER_SUB_URL, SERVER_REQ_URL};
 use crate::dto::command::OClockClientCommand;
 use crate::server::state::{State, TimesheetPivotRecord};
 
@@ -90,15 +92,16 @@ fn compute_state(state: &State) -> Result<serde_json::Value, String> {
     }
 }
 
-fn pub_state(state: &impl Serialize, sub_socket: &mut Socket) {
+fn pub_state(state: &impl Serialize, session: &Session) {
     log::info!("Sending state update");
-    let out = sub_socket.send(&serde_json::to_vec(state).expect("error serializing state"));
+    let serialized = serde_json::to_vec(state).expect("error serializing state");
+    let out = session.put(SERVER_SUB_URL, serialized).wait();
     if let Err(err) = out {
         log::error!("Error publishing state - {err:?}");
     }
 }
 
-fn handle_msg(msg: OClockClientCommand, state: &State, pub_socket: &mut Socket) -> Result<serde_json::Value, String> {
+fn handle_msg(msg: OClockClientCommand, state: &State, session: &Session) -> Result<serde_json::Value, String> {
     match msg {
         OClockClientCommand::Exit => Ok(serde_json::Value::String(String::from("bye bye..."))),
         OClockClientCommand::CurrentTask => {
@@ -126,21 +129,21 @@ fn handle_msg(msg: OClockClientCommand, state: &State, pub_socket: &mut Socket) 
         OClockClientCommand::PushTask { name } => {
             let result = state.new_task(name);
             if let Ok(state) = compute_state(state) {
-                pub_state(&state, pub_socket);
+                pub_state(&state, session);
             }
             result
         },
         OClockClientCommand::DisableTask { task_id } => {
             let result = state.change_task_enabled_flag(task_id, false);
             if let Ok(state) = compute_state(state) {
-                pub_state(&state, pub_socket);
+                pub_state(&state, session);
             }
             result
         }
         OClockClientCommand::SwitchTask { task_id } => {
             let result = state.switch_task(task_id);
             if let Ok(state) = compute_state(&state) {
-                pub_state(&state, pub_socket);
+                pub_state(&state, session);
             }
             result
         },
@@ -148,7 +151,7 @@ fn handle_msg(msg: OClockClientCommand, state: &State, pub_socket: &mut Socket) 
             state.new_task(name)?;
             let state = compute_state(state);
             if let Ok(state) = &state {
-                pub_state(state, pub_socket);
+                pub_state(state, session);
             }
             state
         }
@@ -159,7 +162,7 @@ fn handle_msg(msg: OClockClientCommand, state: &State, pub_socket: &mut Socket) 
             }
             let state = compute_state(state);
             if let Ok(state) = &state {
-                pub_state(state, pub_socket);
+                pub_state(state, session);
             }
             state
         }
@@ -167,7 +170,7 @@ fn handle_msg(msg: OClockClientCommand, state: &State, pub_socket: &mut Socket) 
             state.switch_task(task_id)?;
             let state = compute_state(state);
             if let Ok(state) = &state {
-                pub_state(state, pub_socket);
+                pub_state(state, session);
             }
             state
         }
@@ -179,7 +182,7 @@ fn handle_msg(msg: OClockClientCommand, state: &State, pub_socket: &mut Socket) 
             state.retro_switch_task(task_id as i32, timestamp as i32, keep_previous_task)?;
             let state = compute_state(state);
             if let Ok(state) = &state {
-                pub_state(state, pub_socket);
+                pub_state(state, session);
             }
             state
         }
@@ -187,72 +190,9 @@ fn handle_msg(msg: OClockClientCommand, state: &State, pub_socket: &mut Socket) 
     }
 }
 
-fn nanomsg_listen(socket: &mut Socket, pub_socket: &mut Socket, state: &State) -> MsgListenerStatus {
-    match socket.recv() {
-        Ok(message) => {
-            let message_str = serde_json::from_slice(&message);
-            let status = match message_str {
-                Ok(OClockClientCommand::Exit) => MsgListenerStatus::Terminate,
-                Ok(_) => MsgListenerStatus::Continue,
-                Err(_) => MsgListenerStatus::Fail,
-            };
-
-            let cmd_outcome = match message_str {
-                Ok(msg) => handle_msg(msg, state, pub_socket),
-                Err(e) => {
-                    log::error!("Invalid message received: {}", e);
-                    Err(String::from("Invalid message"))
-                }
-            };
-
-            let reply = match cmd_outcome {
-                Ok(msg) => format!("OK#{}", msg),
-                Err(msg) => format!("ERR#{}", msg),
-            };
-
-            match socket.send(reply.as_bytes()) {
-                Ok(..) => println!("Sent '{}'.", reply),
-                Err(err) => {
-                    log::error!("Server failed to send reply '{:?}'.", err)
-                }
-            };
-
-            status
-        }
-        Err(nng::Error::TryAgain) => {
-            log::debug!("No message received");
-            MsgListenerStatus::Continue
-        }
-        Err(nng::Error::TimedOut) => {
-            log::debug!("No message received");
-            MsgListenerStatus::Continue
-        }
-        Err(err) => {
-            log::error!("Server failed to receive request '{}'.", err);
-            MsgListenerStatus::Continue
-        }
-    }
-}
-
 pub fn server() {
-    let mut nanomsg_req_socket = Socket::new(Protocol::Rep0).unwrap();
-    nanomsg_req_socket
-        .set_opt::<SendTimeout>(Some(Duration::from_millis(500)))
-        .expect("Error setting SendTimeout opt");
-    nanomsg_req_socket
-        .set_opt::<RecvTimeout>(Some(Duration::from_millis(5000)))
-        .expect("Error setting RecvTimeout opt");
-
-    nanomsg_req_socket
-        .listen(crate::core::constants::SERVER_REQ_URL)
-        .unwrap();
-
-    let mut nanomsg_sub_socket = Socket::new(Protocol::Pub0).unwrap();
-
-    nanomsg_sub_socket
-        .listen(SERVER_SUB_URL)
-        .expect("Error listening sub socket");
-
+    let config = Config::default();
+    let session = Arc::new(zenoh::open(config).wait().unwrap());
 
     let (command_tx, command_rx): (Sender<MsgListenerStatus>, Receiver<MsgListenerStatus>) =
         mpsc::channel();
@@ -266,7 +206,9 @@ pub fn server() {
         println!("! {:?}", why.kind());
     });
 
-    let state = State::new(cfg_path);
+    let state = Arc::new(State::new(cfg_path));
+
+    // Initial system events
     let out = state.system_event(SystemEventType::Startup);
     if let Err(err) = out {
         log::warn!("Error pushing system event startup - {err}");
@@ -276,24 +218,66 @@ pub fn server() {
         log::warn!("Error pushing system event ping - {err}");
     }
 
+    // Spawn Zenoh Query Listener
+    let session_clone = session.clone();
+    let state_clone = state.clone();
+    let command_tx_clone = command_tx.clone();
+
+    thread::spawn(move || {
+        let subscriber = session_clone.declare_queryable(SERVER_REQ_URL).wait().unwrap();
+        while let Ok(query) = subscriber.recv() {
+            // query.payload() is expected to be command
+            // payload() returns Result<Payload, Error> or just Payload?
+            // In Zenoh 1.0, query.payload() returns Option<Payload>? No.
+            // query has payload() method or field.
+
+            let payload = query.payload();
+
+            let message_str: Result<OClockClientCommand, _> = match payload {
+                Some(p) => serde_json::from_slice(&p.to_bytes()),
+                None => Err(SerdeError::custom("Missing payload")),
+            };
+
+            let status = match message_str {
+                Ok(OClockClientCommand::Exit) => MsgListenerStatus::Terminate,
+                Ok(_) => MsgListenerStatus::Continue,
+                Err(_) => MsgListenerStatus::Fail,
+            };
+
+            let cmd_outcome = match message_str {
+                Ok(msg) => handle_msg(msg, &state_clone, &session_clone),
+                Err(e) => {
+                    log::error!("Invalid message received: {}", e);
+                    Err(String::from("Invalid message"))
+                }
+            };
+
+            let reply_str = match cmd_outcome {
+                Ok(msg) => format!("OK#{}", msg),
+                Err(msg) => format!("ERR#{}", msg),
+            };
+
+            // Reply to query
+            match query.reply(query.key_expr(), reply_str).wait() {
+                 Ok(_) => println!("Sent reply."),
+                 Err(err) => log::error!("Server failed to send reply '{:?}'.", err),
+            }
+
+            // Send status to main loop if terminate
+            if let MsgListenerStatus::Terminate = status {
+                 let _ = command_tx_clone.send(status);
+                 break;
+            }
+        }
+    });
+
     let mut a = Agenda::new();
 
-    // Run every second
+    // Run every minute (Ping)
+    let state_ping = state.clone();
     a.add(Job::new(
-        || {
-            let daemon_status = nanomsg_listen(&mut nanomsg_req_socket, &mut nanomsg_sub_socket, &state);
-            let out = command_tx.send(daemon_status);
-            if let Err(err) = out {
-                log::error!("Error sending command in channel - {err}");
-            }
-        },
-        "* * * * * *".parse().unwrap(),
-    ));
-
-    // Run every minute
-    a.add(Job::new(
-        || {
-            state.ping();
+        move || {
+            state_ping.ping();
         },
         "0 * * * * *".parse().unwrap(),
     ));
@@ -310,9 +294,10 @@ pub fn server() {
         a.run_pending();
 
         match command_rx.try_recv() {
-            Ok(MsgListenerStatus::Continue) => (),
+            Ok(MsgListenerStatus::Terminate) => break,
+            Ok(_) => (),
             Err(TryRecvError::Empty) => (),
-            _ => break,
+            Err(TryRecvError::Disconnected) => break,
         }
 
         if !running.load(Ordering::SeqCst) {

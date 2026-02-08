@@ -17,7 +17,7 @@ thiserror = "2.0"
 env_logger = { version = "0.11", optional = true }
 clap = { version = "4.5", features = ["derive"], optional = true }
 
-nng = { version = "1.0", optional = true }
+zenoh = { version = "1.7", optional = true }
 
 schedule = { version = "0.1", optional = true }
 itertools = { version = "0.14", optional = true }
@@ -35,8 +35,8 @@ path = "libs/oclock_sqlite"
 
 [features]
 api = ["serde"]
-client = ["nng", "api", "serde_json"]
-server = ["nng", "api", "serde_json", "schedule", "itertools", "csv", "ctrlc", "oclock_sqlite"]
+client = ["zenoh", "api", "serde_json"]
+server = ["zenoh", "api", "serde_json", "schedule", "itertools", "csv", "ctrlc", "oclock_sqlite"]
 bin-cli = ["clap", "env_logger"]
 
 [[bin]]
