@@ -1,6 +1,8 @@
+mod config;
 mod tray;
 mod views;
 
+use config::Config;
 use iced::futures::SinkExt;
 use iced::widget::{button, center, column, container, row, text};
 use iced::{Alignment, Element, Length, Size, Subscription, Task};
@@ -11,11 +13,11 @@ use std::time::Duration;
 use tray::{TrayEvent, TrayHandle};
 use views::quick_switch::{QuickSwitchMessage, QuickSwitchView};
 
-/// Default idle threshold in minutes.
-const IDLE_THRESHOLD_MINUTES: u64 = 5;
-
 /// How often to poll the idle detector (seconds).
 const IDLE_POLL_INTERVAL_SECS: u64 = 5;
+
+/// Idle threshold set once at boot from config, read by the idle subscription.
+static IDLE_THRESHOLD: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
 
 fn main() -> iced::Result {
     env_logger::init();
@@ -70,6 +72,7 @@ enum Message {
 }
 
 struct App {
+    config: Config,
     state: Option<ExportedState>,
     error: Option<String>,
     subscribed: bool,
@@ -81,7 +84,11 @@ struct App {
 
 impl App {
     fn boot() -> (Self, Task<Message>) {
+        let config = Config::load();
+        IDLE_THRESHOLD.set(config.idle.threshold_minutes).ok();
+
         let app = Self {
+            config,
             state: None,
             error: None,
             subscribed: false,
@@ -163,7 +170,7 @@ impl App {
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
                     .as_secs()
-                    .saturating_sub(IDLE_THRESHOLD_MINUTES * 60);
+                    .saturating_sub(self.config.idle.threshold_minutes * 60);
                 Task::perform(
                     oclock_bridge::commands::retro_switch_task(
                         id as u64,
@@ -409,8 +416,9 @@ fn daemon_stream() -> impl iced::futures::Stream<Item = DaemonEvent> {
 }
 
 fn idle_stream() -> impl iced::futures::Stream<Item = IdleEvent> {
-    iced::stream::channel(4, async |mut sender| {
-        let threshold = Duration::from_secs(IDLE_THRESHOLD_MINUTES * 60);
+    iced::stream::channel(4, async move |mut sender| {
+        let threshold_minutes = IDLE_THRESHOLD.get().copied().unwrap_or(5);
+        let threshold = Duration::from_secs(threshold_minutes * 60);
         let poll_interval = Duration::from_secs(IDLE_POLL_INTERVAL_SECS);
 
         // Detect and create idle monitor in blocking context
