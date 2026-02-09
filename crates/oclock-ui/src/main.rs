@@ -12,6 +12,7 @@ use oclock_idle::IdleEvent;
 use std::time::Duration;
 use tray::{TrayEvent, TrayHandle};
 use views::detail::{DetailMessage, DetailView};
+use views::export::{ExportMessage, ExportView};
 use views::quick_switch::{QuickSwitchMessage, QuickSwitchView};
 use views::timeline::{TimelineMessage, TimelineView};
 
@@ -73,6 +74,7 @@ enum Message {
     IdleReturnSwitchTask(i32),
     Timeline(TimelineMessage),
     Detail(DetailMessage),
+    Export(ExportMessage),
 }
 
 struct App {
@@ -84,6 +86,7 @@ struct App {
     quick_switch: QuickSwitchView,
     timeline: TimelineView,
     detail: DetailView,
+    export: ExportView,
     tray_handle: Option<TrayHandle>,
     idle_dialog: Option<IdleReturnDialog>,
 }
@@ -102,6 +105,7 @@ impl App {
             quick_switch: QuickSwitchView::new(),
             timeline: TimelineView::new(),
             detail: DetailView::new(),
+            export: ExportView::new(),
             tray_handle: None,
             idle_dialog: None,
         };
@@ -202,6 +206,7 @@ impl App {
             }
             Message::Timeline(tl_msg) => self.handle_timeline(tl_msg),
             Message::Detail(dt_msg) => self.handle_detail(dt_msg),
+            Message::Export(ex_msg) => self.handle_export(ex_msg),
         }
     }
 
@@ -253,6 +258,27 @@ impl App {
             oclock_bridge::commands::events_by_range(start, end),
             |r| Message::Detail(DetailMessage::BlocksLoaded(r.map_err(|e| e.to_string()))),
         )
+    }
+
+    fn handle_export(&mut self, msg: ExportMessage) -> Task<Message> {
+        match msg {
+            ExportMessage::Generate => {
+                self.export.update(msg);
+                let (start, end) = self.export.date_range();
+                Task::perform(
+                    oclock_bridge::commands::events_by_range(start, end),
+                    |r| {
+                        Message::Export(ExportMessage::BlocksLoaded(
+                            r.map_err(|e| e.to_string()),
+                        ))
+                    },
+                )
+            }
+            _ => {
+                self.export.update(msg);
+                Task::none()
+            }
+        }
     }
 
     fn handle_idle(&mut self, event: IdleEvent) -> Task<Message> {
@@ -365,7 +391,7 @@ impl App {
             Tab::Tasks => self.quick_switch.view(state).map(Message::QuickSwitch),
             Tab::Timeline => self.timeline.view(&self.config).map(Message::Timeline),
             Tab::Detail => self.detail.view().map(Message::Detail),
-            _ => center(text("Coming soon").size(14)).into(),
+            Tab::Export => self.export.view().map(Message::Export),
         };
 
         column![
