@@ -1,0 +1,44 @@
+[package]
+edition = "2024"
+name = "oclock"
+version = "0.1.11"
+
+authors = ["Davide Ghilardi <dghila@d71.dev>"]
+description = "Time tracking utility"
+keywords = [ "time-tracking", "daemon", "utility" ]
+repository = "https://github.com/dghilardi/oclock"
+license = "GPL-3.0-or-later"
+readme = "../../README.md"
+
+[dependencies]
+log = "0.4"
+thiserror = "2.0"
+
+env_logger = { version = "0.11", optional = true }
+clap = { version = "4.5", features = ["derive"], optional = true }
+
+nng = { version = "1.0", optional = true }
+
+schedule = { version = "0.1", optional = true }
+itertools = { version = "0.14", optional = true }
+
+csv = { version = "1.4", optional = true }
+serde = { version ="1.0", features = ["derive"], optional = true }
+serde_json = { version = "1.0", optional = true }
+
+ctrlc = { version = "3.5", features = ["termination"], optional = true }
+
+[dependencies.oclock_sqlite]
+optional = true
+version = "0.1.5"
+path = "../oclock-sqlite"
+
+[features]
+api = ["serde"]
+client = ["nng", "api", "serde_json"]
+server = ["nng", "api", "serde_json", "schedule", "itertools", "csv", "ctrlc", "oclock_sqlite"]
+bin-cli = ["clap", "env_logger"]
+
+[[bin]]
+name = "oclock"
+required-features = ["bin-cli"]

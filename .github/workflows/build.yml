@@ -2,62 +2,62 @@ name: build
 
 on:
   push:
-    tags: ['*.*.*']
+    tags: ["*.*.*"]
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-    - name: Checkout
-      uses: actions/checkout@v1
+      - name: Checkout
+        uses: actions/checkout@v1
 
-    - name: Install minimal stable
-      uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: stable
+      - name: Install minimal stable
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
 
-    - name: Run tests
-      run: cargo test --verbose
+      - name: Run tests
+        run: cargo test --verbose
 
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get -y install gcc-mingw-w64-x86-64 gcc-mingw-w64-i686
-        rustup target add x86_64-pc-windows-gnu
-        rustup target add i686-pc-windows-gnu
-        rustup target add x86_64-unknown-linux-gnu
-        rustup target add x86_64-apple-darwin
-        mkdir dist
-        mkdir builds
-    - name: Build Linux
-      run: |
-        cargo build --release --all-features --target=x86_64-unknown-linux-gnu
-        mkdir builds/oclock-linux
-        cp target/x86_64-unknown-linux-gnu/release/oclock builds/oclock-linux
-        tar -C builds -czvf dist/oclock-linux.tar.gz oclock-linux
-    - name: Upload release
-      uses: softprops/action-gh-release@v1
-      with:
-        # body_path: CHANGELOG.md # TBD
-        files: |
-          dist/oclock-linux.tar.gz
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    - name: Download dasel
-      run: |
-        wget https://github.com/tomwright/dasel/releases/latest/download/dasel_linux_amd64
-        mkdir -p /tmp/bin
-        mv dasel_linux_amd64 /tmp/bin/dasel 
-        chmod +x /tmp/bin/dasel 
-        /tmp/bin/dasel --version
-    - name: Publish cargo package
-      env:
-        CARGO_ACCESS_TOKEN: ${{ secrets.CARGO_ACCESS_TOKEN }}
-      run: |
-        cargo login "$CARGO_ACCESS_TOKEN"
-        cd libs/oclock_sqlite
-        [[ $(curl -s https://index.crates.io/oc/lo/oclock_sqlite | jq "select(.vers==$(/tmp/bin/dasel -f Cargo.toml 'package.version' -w json)) | .vers") ]] || cargo publish
-        cd ../..
-        cargo publish
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install gcc-mingw-w64-x86-64 gcc-mingw-w64-i686
+          rustup target add x86_64-pc-windows-gnu
+          rustup target add i686-pc-windows-gnu
+          rustup target add x86_64-unknown-linux-gnu
+          rustup target add x86_64-apple-darwin
+          mkdir dist
+          mkdir builds
+      - name: Build Linux
+        run: |
+          cargo build --release --all-features -p oclock --target=x86_64-unknown-linux-gnu
+          mkdir builds/oclock-linux
+          cp target/x86_64-unknown-linux-gnu/release/oclock builds/oclock-linux
+          tar -C builds -czvf dist/oclock-linux.tar.gz oclock-linux
+      - name: Upload release
+        uses: softprops/action-gh-release@v1
+        with:
+          # body_path: CHANGELOG.md # TBD
+          files: |
+            dist/oclock-linux.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download dasel
+        run: |
+          wget https://github.com/tomwright/dasel/releases/latest/download/dasel_linux_amd64
+          mkdir -p /tmp/bin
+          mv dasel_linux_amd64 /tmp/bin/dasel
+          chmod +x /tmp/bin/dasel
+          /tmp/bin/dasel --version
+      - name: Publish cargo package
+        env:
+          CARGO_ACCESS_TOKEN: ${{ secrets.CARGO_ACCESS_TOKEN }}
+        run: |
+          cargo login "$CARGO_ACCESS_TOKEN"
+          cd crates/oclock-sqlite
+          [[ $(curl -s https://index.crates.io/oc/lo/oclock_sqlite | jq "select(.vers==$(/tmp/bin/dasel -f Cargo.toml 'package.version' -w json)) | .vers") ]] || cargo publish
+          cd ../oclock
+          cargo publish

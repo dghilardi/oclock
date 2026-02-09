@@ -9,6 +9,7 @@ keywords = [ "time-tracking", "daemon", "utility" ]
 repository = "https://github.com/dghilardi/oclock"
 license = "GPL-3.0-or-later"
 readme = "../../README.md"
+# Note: package name kept as oclock_sqlite for crates.io compatibility
 
 [dependencies]
 log = "0.4"
