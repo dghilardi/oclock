@@ -5,5 +5,15 @@ edition = "2024"
 description = "Idle detection backends for oclock-ui"
 license = "GPL-3.0-or-later"
 
+[features]
+default = ["x11", "wayland", "gnome-dbus"]
+x11 = ["dep:x11rb"]
+wayland = ["dep:wayland-client", "dep:wayland-protocols"]
+gnome-dbus = ["dep:zbus"]
+
 [dependencies]
 log = "0.4"
+x11rb = { version = "0.13", features = ["screensaver"], optional = true }
+wayland-client = { version = "0.31", optional = true }
+wayland-protocols = { version = "0.32", features = ["client", "staging"], optional = true }
+zbus = { version = "5", features = ["blocking"], optional = true }

@@ -6,8 +6,16 @@ use iced::widget::{button, center, column, container, row, text};
 use iced::{Alignment, Element, Length, Size, Subscription, Task};
 use oclock::dto::state::ExportedState;
 use oclock_bridge::subscription::DaemonEvent;
+use oclock_idle::IdleEvent;
+use std::time::Duration;
 use tray::{TrayEvent, TrayHandle};
 use views::quick_switch::{QuickSwitchMessage, QuickSwitchView};
+
+/// Default idle threshold in minutes.
+const IDLE_THRESHOLD_MINUTES: u64 = 5;
+
+/// How often to poll the idle detector (seconds).
+const IDLE_POLL_INTERVAL_SECS: u64 = 5;
 
 fn main() -> iced::Result {
     env_logger::init();
@@ -40,6 +48,12 @@ impl Tab {
     }
 }
 
+/// State for the idle-return dialog.
+#[derive(Debug, Clone)]
+struct IdleReturnDialog {
+    idle_duration: Duration,
+}
+
 #[derive(Debug, Clone)]
 enum Message {
     StateLoaded(Result<ExportedState, String>),
@@ -49,6 +63,10 @@ enum Message {
     TabSelected(Tab),
     Tray(TrayEvent),
     TraySynced,
+    Idle(IdleEvent),
+    IdleReturnDismiss,
+    IdleReturnKeepCurrent,
+    IdleReturnSwitchTask(i32),
 }
 
 struct App {
@@ -58,6 +76,7 @@ struct App {
     active_tab: Tab,
     quick_switch: QuickSwitchView,
     tray_handle: Option<TrayHandle>,
+    idle_dialog: Option<IdleReturnDialog>,
 }
 
 impl App {
@@ -69,6 +88,7 @@ impl App {
             active_tab: Tab::Tasks,
             quick_switch: QuickSwitchView::new(),
             tray_handle: None,
+            idle_dialog: None,
         };
 
         let init_state = Task::perform(oclock_bridge::commands::get_state(), |result| {
@@ -128,6 +148,45 @@ impl App {
             }
             Message::Tray(event) => self.handle_tray(event),
             Message::TraySynced => Task::none(),
+            Message::Idle(event) => self.handle_idle(event),
+            Message::IdleReturnDismiss => {
+                self.idle_dialog = None;
+                Task::none()
+            }
+            Message::IdleReturnKeepCurrent => {
+                self.idle_dialog = None;
+                Task::none()
+            }
+            Message::IdleReturnSwitchTask(id) => {
+                self.idle_dialog = None;
+                let idle_since = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs()
+                    .saturating_sub(IDLE_THRESHOLD_MINUTES * 60);
+                Task::perform(
+                    oclock_bridge::commands::retro_switch_task(
+                        id as u64,
+                        idle_since,
+                        true,
+                    ),
+                    |r| Message::CommandResult(r.map_err(|e| e.to_string())),
+                )
+            }
+        }
+    }
+
+    fn handle_idle(&mut self, event: IdleEvent) -> Task<Message> {
+        match event {
+            IdleEvent::IdleStarted => {
+                log::info!("User went idle");
+                Task::none()
+            }
+            IdleEvent::UserReturned { idle_duration } => {
+                log::info!("User returned after {}s idle", idle_duration.as_secs());
+                self.idle_dialog = Some(IdleReturnDialog { idle_duration });
+                Task::none()
+            }
         }
     }
 
@@ -143,7 +202,6 @@ impl App {
                 Task::none()
             }
             TrayEvent::ToggleWindow => {
-                // TODO: Iced 0.14 window show/hide — for now just log
                 log::info!("Tray: toggle window");
                 Task::none()
             }
@@ -195,6 +253,11 @@ impl App {
     }
 
     fn view(&self) -> Element<'_, Message> {
+        // Show idle-return dialog as an overlay if present
+        if let Some(ref dialog) = self.idle_dialog {
+            return self.view_idle_dialog(dialog);
+        }
+
         if let Some(ref err) = self.error {
             return center(
                 column![
@@ -236,6 +299,55 @@ impl App {
         .into()
     }
 
+    fn view_idle_dialog(&self, dialog: &IdleReturnDialog) -> Element<'_, Message> {
+        let minutes = dialog.idle_duration.as_secs() / 60;
+        let header = text(format!("You were idle for ~{minutes} minutes")).size(18);
+
+        let mut col = column![header, text("What would you like to do?").size(14),]
+            .spacing(16)
+            .padding(24)
+            .align_x(Alignment::Center);
+
+        // "Keep current task" button
+        col = col.push(
+            button(text("Keep current task").size(14))
+                .on_press(Message::IdleReturnKeepCurrent)
+                .style(button::primary)
+                .width(Length::Fill),
+        );
+
+        // Task switch buttons — retroactively switch since idle started
+        if let Some(ref state) = self.state {
+            for task in state.all_tasks.iter().filter(|t| t.enabled != 0) {
+                let is_current = state.current_task.as_ref().is_some_and(|c| c.id == task.id);
+                if !is_current {
+                    let task_id = task.id;
+                    col = col.push(
+                        button(text(format!("Switch to: {}", task.name)).size(14))
+                            .on_press(Message::IdleReturnSwitchTask(task_id))
+                            .style(button::secondary)
+                            .width(Length::Fill),
+                    );
+                }
+            }
+        }
+
+        // Dismiss
+        col = col.push(
+            button(text("Dismiss").size(14))
+                .on_press(Message::IdleReturnDismiss)
+                .style(button::text)
+                .width(Length::Fill),
+        );
+
+        center(
+            container(col)
+                .width(320)
+                .padding(8),
+        )
+        .into()
+    }
+
     fn tab_bar(&self) -> Element<'_, Message> {
         let tabs = Tab::ALL.iter().map(|tab| {
             let label = text(tab.label()).size(13);
@@ -262,8 +374,8 @@ impl App {
 
     fn subscription(&self) -> Subscription<Message> {
         let mut subs = vec![
-            // Always run the tray subscription
             Subscription::run(tray::tray_stream).map(Message::Tray),
+            Subscription::run(idle_stream).map(Message::Idle),
         ];
 
         if self.subscribed {
@@ -292,6 +404,46 @@ fn daemon_stream() -> impl iced::futures::Stream<Item = DaemonEvent> {
                 }
             }
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        }
+    })
+}
+
+fn idle_stream() -> impl iced::futures::Stream<Item = IdleEvent> {
+    iced::stream::channel(4, async |mut sender| {
+        let threshold = Duration::from_secs(IDLE_THRESHOLD_MINUTES * 60);
+        let poll_interval = Duration::from_secs(IDLE_POLL_INTERVAL_SECS);
+
+        // Detect and create idle monitor in blocking context
+        let monitor = tokio::task::spawn_blocking(move || {
+            oclock_idle::detect().map(|detector| oclock_idle::IdleMonitor::new(detector, threshold))
+        })
+        .await
+        .expect("idle detect task panicked");
+
+        let Some(mut monitor) = monitor else {
+            log::info!("No idle detector available, idle subscription disabled");
+            // Park forever — no events to send
+            std::future::pending::<()>().await;
+            return;
+        };
+
+        loop {
+            // Poll in a blocking context since some backends may block briefly
+            let event = tokio::task::spawn_blocking(move || {
+                let evt = monitor.poll();
+                (monitor, evt)
+            })
+            .await
+            .expect("idle poll task panicked");
+
+            monitor = event.0;
+            if let Some(idle_event) = event.1 {
+                if sender.send(idle_event).await.is_err() {
+                    return;
+                }
+            }
+
+            tokio::time::sleep(poll_interval).await;
         }
     })
 }
