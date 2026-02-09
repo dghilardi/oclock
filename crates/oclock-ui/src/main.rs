@@ -1,3 +1,4 @@
+mod tray;
 mod views;
 
 use iced::futures::SinkExt;
@@ -5,6 +6,7 @@ use iced::widget::{button, center, column, container, row, text};
 use iced::{Alignment, Element, Length, Size, Subscription, Task};
 use oclock::dto::state::ExportedState;
 use oclock_bridge::subscription::DaemonEvent;
+use tray::{TrayEvent, TrayHandle};
 use views::quick_switch::{QuickSwitchMessage, QuickSwitchView};
 
 fn main() -> iced::Result {
@@ -45,6 +47,8 @@ enum Message {
     CommandResult(Result<ExportedState, String>),
     QuickSwitch(QuickSwitchMessage),
     TabSelected(Tab),
+    Tray(TrayEvent),
+    TraySynced,
 }
 
 struct App {
@@ -53,6 +57,7 @@ struct App {
     subscribed: bool,
     active_tab: Tab,
     quick_switch: QuickSwitchView,
+    tray_handle: Option<TrayHandle>,
 }
 
 impl App {
@@ -63,13 +68,14 @@ impl App {
             subscribed: false,
             active_tab: Tab::Tasks,
             quick_switch: QuickSwitchView::new(),
+            tray_handle: None,
         };
 
-        let init_task = Task::perform(oclock_bridge::commands::get_state(), |result| {
+        let init_state = Task::perform(oclock_bridge::commands::get_state(), |result| {
             Message::StateLoaded(result.map_err(|e| e.to_string()))
         });
 
-        (app, init_task)
+        (app, init_state)
     }
 
     fn title(&self) -> String {
@@ -88,7 +94,7 @@ impl App {
                 self.state = Some(state);
                 self.error = None;
                 self.subscribed = true;
-                Task::none()
+                self.sync_tray()
             }
             Message::StateLoaded(Err(err)) => {
                 log::error!("Failed to load initial state: {err}");
@@ -98,7 +104,7 @@ impl App {
             Message::DaemonEvent(DaemonEvent::StateUpdated(state)) => {
                 self.state = Some(state);
                 self.error = None;
-                Task::none()
+                self.sync_tray()
             }
             Message::DaemonEvent(DaemonEvent::Disconnected) => {
                 self.error = Some("Disconnected from daemon".into());
@@ -108,7 +114,7 @@ impl App {
             Message::CommandResult(Ok(state)) => {
                 self.state = Some(state);
                 self.error = None;
-                Task::none()
+                self.sync_tray()
             }
             Message::CommandResult(Err(err)) => {
                 log::error!("Command failed: {err}");
@@ -120,6 +126,44 @@ impl App {
                 self.active_tab = tab;
                 Task::none()
             }
+            Message::Tray(event) => self.handle_tray(event),
+            Message::TraySynced => Task::none(),
+        }
+    }
+
+    fn handle_tray(&mut self, event: TrayEvent) -> Task<Message> {
+        match event {
+            TrayEvent::Ready(handle) => {
+                log::info!("System tray icon ready");
+                self.tray_handle = Some(handle);
+                self.sync_tray()
+            }
+            TrayEvent::SpawnFailed(err) => {
+                log::warn!("Failed to spawn system tray: {err}");
+                Task::none()
+            }
+            TrayEvent::ToggleWindow => {
+                // TODO: Iced 0.14 window show/hide — for now just log
+                log::info!("Tray: toggle window");
+                Task::none()
+            }
+            TrayEvent::SwitchTask(id) => Task::perform(
+                oclock_bridge::commands::switch_task(id as u64),
+                |r| Message::CommandResult(r.map_err(|e| e.to_string())),
+            ),
+        }
+    }
+
+    fn sync_tray(&self) -> Task<Message> {
+        if let (Some(handle), Some(state)) = (&self.tray_handle, &self.state) {
+            let handle = handle.clone();
+            let state = state.clone();
+            Task::perform(
+                async move { handle.update_state(&state).await },
+                |_| Message::TraySynced,
+            )
+        } else {
+            Task::none()
         }
     }
 
@@ -217,11 +261,16 @@ impl App {
     }
 
     fn subscription(&self) -> Subscription<Message> {
+        let mut subs = vec![
+            // Always run the tray subscription
+            Subscription::run(tray::tray_stream).map(Message::Tray),
+        ];
+
         if self.subscribed {
-            Subscription::run(daemon_stream).map(Message::DaemonEvent)
-        } else {
-            Subscription::none()
+            subs.push(Subscription::run(daemon_stream).map(Message::DaemonEvent));
         }
+
+        Subscription::batch(subs)
     }
 }
 

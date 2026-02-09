@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=OClock
+Comment=Time tracking companion
+Exec=oclock-ui
+Icon=clock
+Terminal=false
+Categories=Utility;Office;
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
