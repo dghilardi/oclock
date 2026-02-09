@@ -9,14 +9,18 @@ use oclock_sqlite::mappers;
 use oclock_sqlite::models::{NewEvent, NewTask, Task, TimesheetEntry};
 use serde::Serialize;
 
+use crate::dto::state::{ExportedState, TaskInfo};
+
 pub struct State {
     database: DB,
 }
 
-#[derive(Serialize)]
-pub struct ExportedState {
-    current_task: Option<Task>,
-    all_tasks: Vec<Task>,
+fn task_to_info(task: Task) -> TaskInfo {
+    TaskInfo {
+        id: task.id,
+        enabled: task.enabled,
+        name: task.name,
+    }
 }
 
 #[derive(Serialize)]
@@ -217,10 +221,10 @@ impl State {
     }
 
     pub fn get_state(&self) -> Result<ExportedState, String> {
-        Ok(ExportedState {
-            current_task: self.get_current_task()?,
-            all_tasks: self.list_tasks()?,
-        })
+        Ok(ExportedState::new(
+            self.get_current_task()?.map(task_to_info),
+            self.list_tasks()?.into_iter().map(task_to_info).collect(),
+        ))
     }
 
     pub fn retro_switch_task(

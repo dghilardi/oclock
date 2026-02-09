@@ -2,5 +2,8 @@
 members = [
     "crates/oclock",
     "crates/oclock-sqlite",
+    "crates/oclock-bridge",
+    "crates/oclock-idle",
+    "crates/oclock-ui",
 ]
 resolver = "2"

@@ -1,0 +1,11 @@
+[package]
+name = "oclock-bridge"
+version = "0.1.0"
+edition = "2024"
+description = "Async bridge between the oclock daemon and Iced UI"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+oclock = { path = "../oclock", features = ["client", "api"] }
+tokio = { version = "1", features = ["rt", "sync"] }
+log = "0.4"

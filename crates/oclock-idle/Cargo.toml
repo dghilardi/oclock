@@ -1,0 +1,9 @@
+[package]
+name = "oclock-idle"
+version = "0.1.0"
+edition = "2024"
+description = "Idle detection backends for oclock-ui"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+log = "0.4"

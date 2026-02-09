@@ -1,0 +1,18 @@
+[package]
+name = "oclock-ui"
+version = "0.1.0"
+edition = "2024"
+description = "Desktop GUI for the oclock time tracker"
+license = "GPL-3.0-or-later"
+
+[[bin]]
+name = "oclock-ui"
+
+[dependencies]
+oclock = { path = "../oclock", features = ["client", "api"] }
+oclock-bridge = { path = "../oclock-bridge" }
+oclock-idle = { path = "../oclock-idle" }
+iced = { version = "0.14", features = ["tokio"] }
+tokio = { version = "1", features = ["rt-multi-thread"] }
+log = "0.4"
+env_logger = "0.11"

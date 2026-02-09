@@ -1,5 +1,5 @@
 use diesel::prelude::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::schema::*;
 
@@ -9,7 +9,7 @@ pub struct NewTask {
     pub name: String,
 }
 
-#[derive(Queryable, Serialize)]
+#[derive(Queryable, Serialize, Deserialize, Clone, Debug)]
 pub struct Task {
     pub id: i32,
     pub enabled: i32,
