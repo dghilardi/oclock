@@ -37,12 +37,12 @@ Tests are also run automatically on every push and pull request via GitHub Actio
 
 ## Project structure
 
-The workspace contains two crates:
+The workspace contains all crates under `crates/`:
 
 | Crate | Path | Purpose |
 |---|---|---|
-| `oclock` | `/` | CLI binary, client handler, server daemon |
-| `oclock_sqlite` | `libs/oclock_sqlite/` | SQLite data access (Diesel ORM, migrations, models) |
+| `oclock` | `crates/oclock/` | CLI binary, client handler, server daemon |
+| `oclock-sqlite` | `crates/oclock-sqlite/` | SQLite data access (Diesel ORM, migrations, models) |
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for a detailed breakdown.
 
@@ -57,12 +57,12 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for a detailed breakdown.
 
 ## Database migrations
 
-Oclock uses [Diesel migrations](https://diesel.rs/guides/getting-started.html) for schema changes. Migrations live in `libs/oclock_sqlite/migrations/`.
+Oclock uses [Diesel migrations](https://diesel.rs/guides/getting-started.html) for schema changes. Migrations live in `crates/oclock-sqlite/migrations/`.
 
 To add a new migration:
 
 ```sh
-cd libs/oclock_sqlite
+cd crates/oclock-sqlite
 diesel migration generate <migration_name>
 ```
 
@@ -91,7 +91,7 @@ The GitHub Actions `build` workflow will:
 3. Upload binaries to a GitHub release.
 4. Publish `oclock_sqlite` and `oclock` to crates.io (if the version is new).
 
-Remember to update the version in both `Cargo.toml` (root) and `libs/oclock_sqlite/Cargo.toml` as needed.
+Remember to update the version in both `crates/oclock/Cargo.toml` and `crates/oclock-sqlite/Cargo.toml` as needed.
 
 ## Reporting issues
 

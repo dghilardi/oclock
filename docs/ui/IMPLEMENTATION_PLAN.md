@@ -45,11 +45,11 @@ The idle detector will be a trait with platform-specific implementations, select
 
 ### Communication with daemon: oclock library
 
-The UI crates live inside the oclock workspace, so they reference the root crate as a path dependency:
+The UI crates live inside the oclock workspace, so they reference the oclock crate as a path dependency:
 
 ```toml
 [dependencies]
-oclock = { path = "../..", features = ["client", "api"] }
+oclock = { path = "../oclock", features = ["client", "api"] }
 ```
 
 All IPC details (socket URLs, NNG protocol, message framing) are encapsulated inside the oclock library's `client` feature. Consumers never import `nng` directly. The public API exposes:
@@ -67,12 +67,20 @@ The daemon currently uses NNG (nanomsg-next-generation) for IPC. We keep NNG for
 
 The UI crates live inside the oclock repository as workspace members. This simplifies development: changes to the daemon API and the UI can land in the same commit, and there is a single CI pipeline.
 
+The existing crates (`oclock`, `oclock_sqlite`) are relocated under `crates/` for consistency. See Phase 0 for the migration steps.
+
 ```
-oclock/                          # existing repo root
-├── Cargo.toml                   # [workspace] — adds crates/oclock-* members
-├── src/                         # existing daemon + client library
-├── libs/oclock_sqlite/          # existing SQLite layer
+oclock/                          # repo root
+├── Cargo.toml                   # [workspace] only — no [package]
 ├── crates/
+│   ├── oclock/                  # existing daemon + client library (moved from root)
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   ├── oclock-sqlite/           # existing SQLite layer (moved from libs/oclock_sqlite)
+│   │   ├── Cargo.toml
+│   │   ├── migrations/
+│   │   └── src/
+│   │
 │   ├── oclock-bridge/           # Library: async wrapper + state cache for Iced integration
 │   │   ├── Cargo.toml
 │   │   └── src/
@@ -118,17 +126,18 @@ oclock/                          # existing repo root
 
 ### Workspace layout
 
-The root `Cargo.toml` becomes a workspace:
+The root `Cargo.toml` is a pure workspace manifest (no `[package]`):
 
 ```toml
 [workspace]
 members = [
-    ".",                         # oclock (daemon + client library)
-    "libs/oclock_sqlite",
+    "crates/oclock",
+    "crates/oclock-sqlite",
     "crates/oclock-bridge",
     "crates/oclock-idle",
     "crates/oclock-ui",
 ]
+resolver = "2"
 ```
 
 ### Crate dependency graph
@@ -236,12 +245,56 @@ Task colors that are not explicitly configured are auto-assigned from a palette.
 
 ## Implementation phases
 
+### Phase 0 — Repository restructuring (prerequisite)
+
+**Goal:** Convert the repository into a Cargo workspace with all crates under `crates/`. This is a pure structural change — no functional modifications.
+
+1. **Move the main crate** from the repo root into `crates/oclock/`:
+   - Move `src/` to `crates/oclock/src/`.
+   - Create `crates/oclock/Cargo.toml` with the current `[package]`, `[dependencies]`, `[features]`, and `[[bin]]` sections.
+   - Update the `oclock_sqlite` path dependency from `path = "libs/oclock_sqlite"` to `path = "../oclock-sqlite"`.
+
+2. **Move the SQLite crate** from `libs/oclock_sqlite/` to `crates/oclock-sqlite/`:
+   - Move all contents (`src/`, `migrations/`, `Cargo.toml`).
+   - Update the `readme` path in its `Cargo.toml` (currently `../../README.md`).
+   - Remove the now-empty `libs/` directory.
+
+3. **Create the workspace root `Cargo.toml`**:
+   ```toml
+   [workspace]
+   members = [
+       "crates/oclock",
+       "crates/oclock-sqlite",
+   ]
+   resolver = "2"
+   ```
+
+4. **Update `.gitignore`**:
+   - Remove `/libs/oclock_sqlite/target/`.
+   - A single `/target/` entry is sufficient (workspace shares one target dir).
+
+5. **Update GitHub Actions**:
+   - `.github/workflows/build.yml`:
+     - Change `cargo build --release --all-features` to `cargo build --release --all-features -p oclock` (workspace builds all members by default; we only want the `oclock` binary in the release artifact).
+     - Update binary path from `target/.../release/oclock` to the same (workspace target dir doesn't change).
+     - Update the publish step: `cd crates/oclock-sqlite` instead of `cd libs/oclock_sqlite`, and `cd ../oclock` instead of `cd ../..`.
+   - `.github/workflows/tests.yml`: no changes needed (`cargo test --verbose` runs all workspace tests automatically).
+
+6. **Update documentation**:
+   - `CONTRIBUTING.md`: update the project structure table, migration path (`crates/oclock-sqlite/migrations/`), and release process notes.
+   - `docs/ARCHITECTURE.md`: update the crate structure and module layout sections to reflect new paths.
+
+7. **Remove stale files**:
+   - `.gitlab-ci.yml` (legacy, not in use).
+
+**Validation:** `cargo test --verbose` passes. `cargo build --release --all-features -p oclock` produces the same binary. CI passes on a test branch before merging.
+
 ### Phase 1 — Scaffolding and bridge (M1 foundation)
 
-**Goal:** Set up the workspace, add the subscribe API to the oclock library, establish communication with the daemon, prove the architecture.
+**Goal:** Add the subscribe API to the oclock library, create the UI crates, establish communication with the daemon, prove the architecture.
 
-1. Convert the oclock repo to a Cargo workspace (add `[workspace]` to root `Cargo.toml`).
-2. Add `subscribe() -> Receiver<ExportedState>` to the oclock library under the `client` feature. This encapsulates the PUB socket connection so consumers never touch NNG directly.
+1. Add `subscribe() -> Receiver<ExportedState>` to the oclock library under the `client` feature. This encapsulates the PUB socket connection so consumers never touch NNG directly.
+2. Add `oclock-bridge`, `oclock-idle`, and `oclock-ui` to the workspace members in the root `Cargo.toml`.
 3. Create the `oclock-bridge` crate — thin async layer that wraps `oclock::client::invoke()` (via `spawn_blocking`) and `oclock::client::subscribe()` into Iced-friendly primitives.
 4. Create the `oclock-idle` crate (stub for now).
 5. Create the `oclock-ui` crate with a minimal Iced app that displays the current task name (proof of concept).

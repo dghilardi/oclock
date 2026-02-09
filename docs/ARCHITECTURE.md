@@ -20,16 +20,16 @@ Oclock is a client-server time tracking application. A long-running **server** (
 
 ## Crate structure
 
-The project is a Cargo workspace with two crates:
+The project is a Cargo workspace. All crates live under `crates/`:
 
 ```
-oclock (root)            -- CLI binary + client/server library
-libs/oclock_sqlite/      -- SQLite data access layer
+crates/oclock/           -- CLI binary + client/server library
+crates/oclock-sqlite/    -- SQLite data access layer
 ```
 
 ### Feature flags
 
-The root crate uses feature flags to compile only the required modules:
+The `oclock` crate uses feature flags to compile only the required modules:
 
 | Feature | Enables | Use case |
 |---|---|---|
@@ -43,34 +43,37 @@ Building with `--all-features` produces the full binary with both client and ser
 ## Module layout
 
 ```
-src/
-├── lib.rs                      # Feature-gated module declarations
-├── core/
-│   └── constants.rs            # IPC socket URL constants
-├── dto/
-│   └── command.rs              # OClockClientCommand enum (shared protocol)
-├── client/
-│   └── handler.rs              # invoke_server() -- sends a command, returns the reply
-├── server/
-│   ├── handler.rs              # server() -- main daemon loop
-│   └── state.rs                # State struct -- business logic over the database
-└── bin/oclock/
-    ├── main.rs                 # CLI entry point
-    └── cli/
-        └── args.rs             # Clap argument definitions
+crates/oclock/
+├── src/
+│   ├── lib.rs                      # Feature-gated module declarations
+│   ├── core/
+│   │   └── constants.rs            # IPC socket URL constants
+│   ├── dto/
+│   │   └── command.rs              # OClockClientCommand enum (shared protocol)
+│   ├── client/
+│   │   └── handler.rs              # invoke_server() -- sends a command, returns the reply
+│   ├── server/
+│   │   ├── handler.rs              # server() -- main daemon loop
+│   │   └── state.rs                # State struct -- business logic over the database
+│   └── bin/oclock/
+│       ├── main.rs                 # CLI entry point
+│       └── cli/
+│           └── args.rs             # Clap argument definitions
+└── Cargo.toml
 
-libs/oclock_sqlite/
+crates/oclock-sqlite/
 ├── src/
 │   ├── lib.rs
-│   ├── connection.rs           # DB struct -- connection + migration management
-│   ├── constants.rs            # SystemEventType enum
-│   ├── models.rs               # Diesel ORM models (Task, Event, TimesheetEntry, etc.)
-│   ├── schema.rs               # Diesel table! declarations
+│   ├── connection.rs               # DB struct -- connection + migration management
+│   ├── constants.rs                # SystemEventType enum
+│   ├── models.rs                   # Diesel ORM models (Task, Event, TimesheetEntry, etc.)
+│   ├── schema.rs                   # Diesel table! declarations
 │   └── mappers/
-│       ├── events.rs           # Event CRUD operations
-│       ├── tasks.rs            # Task CRUD operations
-│       └── timesheet.rs        # Timesheet query operations
-└── migrations/                 # SQL migration files
+│       ├── events.rs               # Event CRUD operations
+│       ├── tasks.rs                # Task CRUD operations
+│       └── timesheet.rs            # Timesheet query operations
+├── migrations/                     # SQL migration files
+└── Cargo.toml
 ```
 
 ## Communication protocol
