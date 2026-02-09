@@ -227,6 +227,41 @@ impl State {
         ))
     }
 
+    pub fn delete_event(&self, event_id: i32) -> Result<(), String> {
+        let mut connection = self.database.establish_connection();
+        match mappers::events::delete_event(&mut connection, event_id) {
+            Ok(0) => Err(format!("Event {} not found", event_id)),
+            Ok(_) => Ok(()),
+            Err(e) => Err(format!("Error deleting event: '{}'", e)),
+        }
+    }
+
+    pub fn edit_event(
+        &self,
+        event_id: i32,
+        new_timestamp: Option<i32>,
+        new_task_id: Option<Option<i32>>,
+    ) -> Result<(), String> {
+        let mut connection = self.database.establish_connection();
+        match mappers::events::update_event(&mut connection, event_id, new_timestamp, new_task_id) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(format!("Error editing event: '{}'", e)),
+        }
+    }
+
+    pub fn insert_event(&self, timestamp: i32, task_id: Option<i32>) -> Result<(), String> {
+        let mut connection = self.database.establish_connection();
+        let event = NewEvent {
+            event_timestamp: timestamp,
+            task_id,
+            system_event_name: None,
+        };
+        match mappers::events::push_event(&mut connection, &event) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(format!("Error inserting event: '{}'", e)),
+        }
+    }
+
     pub fn events_by_range(
         &self,
         start_ts: u64,

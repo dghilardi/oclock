@@ -45,6 +45,36 @@ pub fn move_system_event(conn: &mut SqliteConnection, unix_ts: i32, event_name: 
         .expect(&format!("Error updating {} timestamp", event_name));
 }
 
+pub fn delete_event(conn: &mut SqliteConnection, event_id: i32) -> Result<usize, Error> {
+    use crate::schema::events::dsl::*;
+
+    diesel::delete(events.filter(id.eq(event_id))).execute(conn)
+}
+
+pub fn update_event(
+    conn: &mut SqliteConnection,
+    event_id: i32,
+    new_timestamp: Option<i32>,
+    new_task_id: Option<Option<i32>>,
+) -> Result<usize, Error> {
+    use crate::schema::events::dsl::*;
+
+    let target = events.filter(id.eq(event_id));
+
+    match (new_timestamp, new_task_id) {
+        (Some(ts), Some(tid)) => {
+            diesel::update(target)
+                .set((event_timestamp.eq(ts), task_id.eq(tid)))
+                .execute(conn)
+        }
+        (Some(ts), None) => diesel::update(target)
+            .set(event_timestamp.eq(ts))
+            .execute(conn),
+        (None, Some(tid)) => diesel::update(target).set(task_id.eq(tid)).execute(conn),
+        (None, None) => Ok(0),
+    }
+}
+
 pub fn current_task(conn: &mut SqliteConnection) -> Result<Option<Task>, Error> {
     use crate::schema::events::dsl::*;
     use crate::schema::tasks::dsl::id;

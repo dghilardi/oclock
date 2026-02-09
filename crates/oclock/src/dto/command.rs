@@ -46,6 +46,22 @@ pub enum OClockClientCommand {
         start_timestamp: u64,
         end_timestamp: u64,
     },
+    /// Delete an event by ID (json version)
+    #[serde(rename_all = "camelCase")]
+    JsonDeleteEvent { event_id: u64 },
+    /// Edit an event's timestamp and/or task (json version)
+    #[serde(rename_all = "camelCase")]
+    JsonEditEvent {
+        event_id: u64,
+        new_timestamp: Option<u64>,
+        new_task_id: Option<Option<i32>>,
+    },
+    /// Insert a manual event (json version)
+    #[serde(rename_all = "camelCase")]
+    JsonInsertEvent {
+        timestamp: u64,
+        task_id: Option<i32>,
+    },
     /// Produce the full timesheet
     #[serde(rename_all = "camelCase")]
     Timesheet,

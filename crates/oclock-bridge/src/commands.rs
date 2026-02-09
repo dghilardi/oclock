@@ -46,6 +46,33 @@ pub async fn events_by_range(
         .expect("blocking task panicked")
 }
 
+/// Delete an event by ID and return the new state.
+pub async fn delete_event(event_id: u64) -> Result<ExportedState, SrvInvocationError> {
+    send_command(OClockClientCommand::JsonDeleteEvent { event_id }).await
+}
+
+/// Edit an event's timestamp and/or task, return the new state.
+pub async fn edit_event(
+    event_id: u64,
+    new_timestamp: Option<u64>,
+    new_task_id: Option<Option<i32>>,
+) -> Result<ExportedState, SrvInvocationError> {
+    send_command(OClockClientCommand::JsonEditEvent {
+        event_id,
+        new_timestamp,
+        new_task_id,
+    })
+    .await
+}
+
+/// Insert a manual event and return the new state.
+pub async fn insert_event(
+    timestamp: u64,
+    task_id: Option<i32>,
+) -> Result<ExportedState, SrvInvocationError> {
+    send_command(OClockClientCommand::JsonInsertEvent { timestamp, task_id }).await
+}
+
 /// Retroactively switch task at a past timestamp.
 pub async fn retro_switch_task(
     task_id: u64,

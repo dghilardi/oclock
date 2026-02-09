@@ -24,9 +24,10 @@ impl ExportedState {
     }
 }
 
-/// A single time block in the history, used by the timeline view.
+/// A single time block in the history, used by the timeline and detail views.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TimeBlock {
+    pub id: i32,
     pub ts_start: i64,
     pub ts_end: Option<i64>,
     pub task_id: Option<i32>,

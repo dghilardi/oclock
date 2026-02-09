@@ -11,6 +11,7 @@ use oclock_bridge::subscription::DaemonEvent;
 use oclock_idle::IdleEvent;
 use std::time::Duration;
 use tray::{TrayEvent, TrayHandle};
+use views::detail::{DetailMessage, DetailView};
 use views::quick_switch::{QuickSwitchMessage, QuickSwitchView};
 use views::timeline::{TimelineMessage, TimelineView};
 
@@ -71,6 +72,7 @@ enum Message {
     IdleReturnKeepCurrent,
     IdleReturnSwitchTask(i32),
     Timeline(TimelineMessage),
+    Detail(DetailMessage),
 }
 
 struct App {
@@ -81,6 +83,7 @@ struct App {
     active_tab: Tab,
     quick_switch: QuickSwitchView,
     timeline: TimelineView,
+    detail: DetailView,
     tray_handle: Option<TrayHandle>,
     idle_dialog: Option<IdleReturnDialog>,
 }
@@ -98,6 +101,7 @@ impl App {
             active_tab: Tab::Tasks,
             quick_switch: QuickSwitchView::new(),
             timeline: TimelineView::new(),
+            detail: DetailView::new(),
             tray_handle: None,
             idle_dialog: None,
         };
@@ -136,13 +140,12 @@ impl App {
                 self.state = Some(state);
                 self.error = None;
                 let tray = self.sync_tray();
-                // Refresh timeline if it's the active tab (state changed = task switched)
-                let timeline = if self.active_tab == Tab::Timeline {
-                    self.fetch_timeline()
-                } else {
-                    Task::none()
+                let view_refresh = match self.active_tab {
+                    Tab::Timeline => self.fetch_timeline(),
+                    Tab::Detail => self.fetch_detail(),
+                    _ => Task::none(),
                 };
-                Task::batch([tray, timeline])
+                Task::batch([tray, view_refresh])
             }
             Message::DaemonEvent(DaemonEvent::Disconnected) => {
                 self.error = Some("Disconnected from daemon".into());
@@ -153,12 +156,12 @@ impl App {
                 self.state = Some(state);
                 self.error = None;
                 let tray = self.sync_tray();
-                let timeline = if self.active_tab == Tab::Timeline {
-                    self.fetch_timeline()
-                } else {
-                    Task::none()
+                let view_refresh = match self.active_tab {
+                    Tab::Timeline => self.fetch_timeline(),
+                    Tab::Detail => self.fetch_detail(),
+                    _ => Task::none(),
                 };
-                Task::batch([tray, timeline])
+                Task::batch([tray, view_refresh])
             }
             Message::CommandResult(Err(err)) => {
                 log::error!("Command failed: {err}");
@@ -168,10 +171,10 @@ impl App {
             Message::QuickSwitch(qs_msg) => self.handle_quick_switch(qs_msg),
             Message::TabSelected(tab) => {
                 self.active_tab = tab;
-                if tab == Tab::Timeline && self.timeline.needs_fetch() {
-                    self.fetch_timeline()
-                } else {
-                    Task::none()
+                match tab {
+                    Tab::Timeline if self.timeline.needs_fetch() => self.fetch_timeline(),
+                    Tab::Detail if self.detail.needs_fetch() => self.fetch_detail(),
+                    _ => Task::none(),
                 }
             }
             Message::Tray(event) => self.handle_tray(event),
@@ -198,6 +201,7 @@ impl App {
                 )
             }
             Message::Timeline(tl_msg) => self.handle_timeline(tl_msg),
+            Message::Detail(dt_msg) => self.handle_detail(dt_msg),
         }
     }
 
@@ -221,6 +225,33 @@ impl App {
         Task::perform(
             oclock_bridge::commands::events_by_range(start, end),
             |r| Message::Timeline(TimelineMessage::BlocksLoaded(r.map_err(|e| e.to_string()))),
+        )
+    }
+
+    fn handle_detail(&mut self, msg: DetailMessage) -> Task<Message> {
+        match msg {
+            DetailMessage::BlocksLoaded(_) => {
+                self.detail.update(msg);
+                Task::none()
+            }
+            DetailMessage::DeleteEvent(event_id) => Task::perform(
+                oclock_bridge::commands::delete_event(event_id as u64),
+                |r| Message::CommandResult(r.map_err(|e| e.to_string())),
+            ),
+            _ => {
+                // Navigation messages
+                self.detail.update(msg);
+                self.fetch_detail()
+            }
+        }
+    }
+
+    fn fetch_detail(&mut self) -> Task<Message> {
+        self.detail.set_loading();
+        let (start, end) = self.detail.day_range();
+        Task::perform(
+            oclock_bridge::commands::events_by_range(start, end),
+            |r| Message::Detail(DetailMessage::BlocksLoaded(r.map_err(|e| e.to_string()))),
         )
     }
 
@@ -333,6 +364,7 @@ impl App {
         let tab_content: Element<'_, Message> = match self.active_tab {
             Tab::Tasks => self.quick_switch.view(state).map(Message::QuickSwitch),
             Tab::Timeline => self.timeline.view(&self.config).map(Message::Timeline),
+            Tab::Detail => self.detail.view().map(Message::Detail),
             _ => center(text("Coming soon").size(14)).into(),
         };
 

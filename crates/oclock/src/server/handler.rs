@@ -194,6 +194,7 @@ fn handle_msg(msg: OClockClientCommand, state: &State, pub_socket: &mut Socket) 
             let blocks: Vec<TimeBlock> = entries
                 .into_iter()
                 .map(|e| TimeBlock {
+                    id: e.id,
                     ts_start: e.ts_start as i64,
                     ts_end: e.ts_end.map(|t| t as i64),
                     task_id: e.task_id,
@@ -204,6 +205,41 @@ fn handle_msg(msg: OClockClientCommand, state: &State, pub_socket: &mut Socket) 
                 Ok(json) => Ok(json),
                 Err(e) => Err(format!("Error serializing events: {}", e)),
             }
+        }
+        OClockClientCommand::JsonDeleteEvent { event_id } => {
+            state.delete_event(event_id as i32)?;
+            let state = compute_state(state);
+            if let Ok(state) = &state {
+                pub_state(state, pub_socket);
+            }
+            state
+        }
+        OClockClientCommand::JsonEditEvent {
+            event_id,
+            new_timestamp,
+            new_task_id,
+        } => {
+            state.edit_event(
+                event_id as i32,
+                new_timestamp.map(|t| t as i32),
+                new_task_id,
+            )?;
+            let state = compute_state(state);
+            if let Ok(state) = &state {
+                pub_state(state, pub_socket);
+            }
+            state
+        }
+        OClockClientCommand::JsonInsertEvent {
+            timestamp,
+            task_id,
+        } => {
+            state.insert_event(timestamp as i32, task_id)?;
+            let state = compute_state(state);
+            if let Ok(state) = &state {
+                pub_state(state, pub_socket);
+            }
+            state
         }
     }
 }
