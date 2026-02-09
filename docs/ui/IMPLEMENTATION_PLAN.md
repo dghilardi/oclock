@@ -52,13 +52,16 @@ The UI crates live inside the oclock workspace, so they reference the root crate
 oclock = { path = "../..", features = ["client", "api"] }
 ```
 
-- **Commands**: call `oclock::client::handler::invoke_server()` from a background thread (it blocks on NNG sockets).
-- **Subscriptions**: connect to the PUB socket (`ipc:///tmp/time-monitor-sub.ipc`) via NNG `Sub0` in a dedicated thread, forward messages as Iced `Subscription` events.
-- **Initial state**: fetch via `JsonState` command on startup, then keep in sync via PUB.
+All IPC details (socket URLs, NNG protocol, message framing) are encapsulated inside the oclock library's `client` feature. Consumers never import `nng` directly. The public API exposes:
+
+- **`invoke(cmd) -> Result<Response>`** — send a command and get a typed response. Wraps the REQ/REP socket, JSON serialization, and `OK#`/`ERR#` framing.
+- **`subscribe() -> Receiver<ExportedState>`** — subscribe to real-time state updates. Wraps the PUB socket connection and deserialization.
+
+This means `oclock-bridge` (and any other consumer) depends only on `oclock` — not on `nng` or any transport crate. When the IPC transport changes (e.g. to Zenoh), only the oclock library internals change; downstream crates update their `oclock` dependency version and recompile with zero code changes.
 
 ### IPC transport: NNG (with future migration path)
 
-The daemon currently uses NNG (nanomsg-next-generation) for IPC. We keep NNG for now as it is proven and stable. [Zenoh](https://zenoh.io/) is a potential future replacement that offers richer pub/sub semantics, discovery, and better async support. A migration would require daemon-side changes and is out of scope for the initial release.
+The daemon currently uses NNG (nanomsg-next-generation) for IPC. We keep NNG for now as it is proven and stable. [Zenoh](https://zenoh.io/) is a potential future replacement that offers richer pub/sub semantics, discovery, and better async support. Because transport details are hidden behind the oclock library API, a migration to Zenoh would be transparent to all consumers. This is out of scope for the initial release.
 
 ## Project structure
 
@@ -70,13 +73,13 @@ oclock/                          # existing repo root
 ├── src/                         # existing daemon + client library
 ├── libs/oclock_sqlite/          # existing SQLite layer
 ├── crates/
-│   ├── oclock-bridge/           # Library: daemon communication + state management
+│   ├── oclock-bridge/           # Library: async wrapper + state cache for Iced integration
 │   │   ├── Cargo.toml
 │   │   └── src/
 │   │       ├── lib.rs
-│   │       ├── client.rs        # Wraps invoke_server() with async interface
-│   │       ├── subscriber.rs    # PUB socket listener, emits state events
-│   │       └── state.rs         # Cached daemon state, updated by subscriber
+│   │       ├── commands.rs      # Async wrappers around oclock::client::invoke()
+│   │       ├── subscription.rs  # Iced Subscription that forwards oclock::client::subscribe()
+│   │       └── state.rs         # Cached ExportedState, updated by subscription
 │   │
 │   ├── oclock-idle/             # Library: idle detection abstraction
 │   │   ├── Cargo.toml
@@ -144,31 +147,38 @@ oclock-ui (bin)
 ### Data flow
 
 ```
-                          ┌──────────────┐
-                          │  Iced App    │
-                          │  (update fn) │
-                          └──┬───────┬───┘
-                     Message │       │ Command
-                             │       │
-              ┌──────────────▼─┐   ┌─▼──────────────┐
-              │  Subscription  │   │  Task::perform  │
-              │  (PUB socket)  │   │  (invoke_server)│
-              └──────────────┬─┘   └─┬──────────────┘
-                             │       │
-                       NNG   │       │  NNG
-                      Sub0   │       │  Req0
-                             │       │
-                      ┌──────▼───────▼──────┐
-                      │    oclock daemon    │
-                      └─────────────────────┘
+┌──────────────┐
+│  Iced App    │
+│  (update fn) │
+└──┬───────┬───┘
+   │       │
+   │  Message::StateUpdated    Command (Task::perform)
+   │       │                          │
+┌──▼───────▼───┐              ┌───────▼──────────┐
+│ oclock-bridge│              │  oclock-bridge    │
+│ (subscriber) │              │  (client)         │
+└──────┬───────┘              └───────┬───────────┘
+       │                              │
+       │  oclock::client::subscribe() │  oclock::client::invoke()
+       │                              │
+┌──────▼──────────────────────────────▼──────┐
+│          oclock library (client feature)   │
+│    NNG sockets, framing, serialization     │
+└──────────────────┬─────────────────────────┘
+                   │ IPC (transport-agnostic boundary)
+          ┌────────▼────────┐
+          │  oclock daemon  │
+          └─────────────────┘
 ```
 
-1. On startup, `oclock-bridge` sends a `JsonState` command to get the initial state.
-2. A `Subscription` thread connects to the PUB socket and listens for state updates.
+1. On startup, `oclock-bridge` calls `oclock::client::invoke(JsonState)` to get the initial state.
+2. `oclock-bridge` calls `oclock::client::subscribe()` to receive a channel of `ExportedState` updates.
 3. Every state update is forwarded as an Iced `Message::StateUpdated(ExportedState)`.
-4. User actions (click task, create task, etc.) dispatch `Command`s that call `invoke_server()` via `Task::perform` (Iced's async command model).
-5. The daemon processes the command, mutates state, and publishes the new state on PUB.
+4. User actions (click task, create task, etc.) dispatch `Command`s that call `oclock::client::invoke()` via `Task::perform` (Iced's async command model).
+5. The daemon processes the command, mutates state, and publishes the new state.
 6. The subscription picks it up and the cycle repeats.
+
+The oclock library owns all transport logic. Neither `oclock-bridge` nor `oclock-ui` import `nng` or know about socket URLs.
 
 ### Idle detection flow
 
@@ -228,14 +238,14 @@ Task colors that are not explicitly configured are auto-assigned from a palette.
 
 ### Phase 1 — Scaffolding and bridge (M1 foundation)
 
-**Goal:** Set up the workspace, establish communication with the daemon, prove the architecture.
+**Goal:** Set up the workspace, add the subscribe API to the oclock library, establish communication with the daemon, prove the architecture.
 
-1. Create the Cargo workspace with `oclock-bridge`, `oclock-idle`, and `oclock-ui` crates.
-2. Implement `oclock-bridge::client` — async wrapper around `invoke_server()` using `tokio::task::spawn_blocking`.
-3. Implement `oclock-bridge::subscriber` — PUB socket listener that emits state events via a channel.
-4. Implement `oclock-bridge::state` — cached `ExportedState` updated by the subscriber.
-5. Create a minimal Iced app that displays the current task name (proof of concept).
-6. Wire up the Iced `Subscription` for real-time state updates.
+1. Convert the oclock repo to a Cargo workspace (add `[workspace]` to root `Cargo.toml`).
+2. Add `subscribe() -> Receiver<ExportedState>` to the oclock library under the `client` feature. This encapsulates the PUB socket connection so consumers never touch NNG directly.
+3. Create the `oclock-bridge` crate — thin async layer that wraps `oclock::client::invoke()` (via `spawn_blocking`) and `oclock::client::subscribe()` into Iced-friendly primitives.
+4. Create the `oclock-idle` crate (stub for now).
+5. Create the `oclock-ui` crate with a minimal Iced app that displays the current task name (proof of concept).
+6. Wire up the Iced `Subscription` for real-time state updates via `oclock-bridge`.
 
 **Validation:** Launch the app alongside the daemon; switch tasks via CLI and confirm the UI updates in real time.
 
@@ -339,19 +349,20 @@ Task colors that are not explicitly configured are auto-assigned from a palette.
 
 ## Key dependencies
 
-| Crate | Purpose | Version |
-|---|---|---|
-| `iced` | GUI framework | 0.14.0 |
-| `ksni` | Linux system tray (StatusNotifierItem) | 0.2+ |
-| `oclock` | Daemon communication (library) | 0.1 (workspace path dependency) |
-| `nng` | PUB socket subscription | 1.0 |
-| `tokio` | Async runtime (for Iced commands) | 1 |
-| `serde` + `toml` | Configuration file | 1.0 / 0.8 |
-| `directories` | XDG path resolution | 5 |
-| `x11` or `xcb` | X11 idle detection | — |
-| `wayland-client` | Wayland idle detection | 0.31+ |
-| `zbus` | DBus communication (GNOME idle, ksni internals) | 4+ |
-| `chrono` | Date/time formatting | 0.4 |
+| Crate | Used by | Purpose | Version |
+|---|---|---|---|
+| `iced` | oclock-ui | GUI framework | 0.14.0 |
+| `ksni` | oclock-ui | Linux system tray (StatusNotifierItem) | 0.2+ |
+| `oclock` | oclock-bridge | Daemon communication (library, workspace path dep) | 0.1 |
+| `tokio` | oclock-bridge | Async runtime (spawn_blocking for IPC calls) | 1 |
+| `serde` + `toml` | oclock-ui | Configuration file | 1.0 / 0.8 |
+| `directories` | oclock-ui | XDG path resolution | 5 |
+| `x11` or `xcb` | oclock-idle | X11 idle detection | — |
+| `wayland-client` | oclock-idle | Wayland idle detection | 0.31+ |
+| `zbus` | oclock-idle | DBus (GNOME Mutter IdleMonitor) | 4+ |
+| `chrono` | oclock-ui | Date/time formatting | 0.4 |
+
+Note: `nng` is a transitive dependency via the oclock library and is **not** a direct dependency of any UI crate.
 
 ## Resolved decisions
 
