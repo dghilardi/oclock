@@ -184,6 +184,27 @@ fn handle_msg(msg: OClockClientCommand, state: &State, pub_socket: &mut Socket) 
             state
         }
         OClockClientCommand::JsonState => compute_state(state),
+        OClockClientCommand::JsonEventsByRange {
+            start_timestamp,
+            end_timestamp,
+        } => {
+            use crate::dto::state::TimeBlock;
+
+            let entries = state.events_by_range(start_timestamp, end_timestamp)?;
+            let blocks: Vec<TimeBlock> = entries
+                .into_iter()
+                .map(|e| TimeBlock {
+                    ts_start: e.ts_start as i64,
+                    ts_end: e.ts_end.map(|t| t as i64),
+                    task_id: e.task_id,
+                    task_name: e.task_name,
+                })
+                .collect();
+            match serde_json::to_value(&blocks) {
+                Ok(json) => Ok(json),
+                Err(e) => Err(format!("Error serializing events: {}", e)),
+            }
+        }
     }
 }
 

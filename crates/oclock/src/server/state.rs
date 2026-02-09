@@ -6,7 +6,7 @@ use log::debug;
 use oclock_sqlite::connection::DB;
 use oclock_sqlite::constants::SystemEventType;
 use oclock_sqlite::mappers;
-use oclock_sqlite::models::{NewEvent, NewTask, Task, TimesheetEntry};
+use oclock_sqlite::models::{HistoryEntry, NewEvent, NewTask, Task, TimesheetEntry};
 use serde::Serialize;
 
 use crate::dto::state::{ExportedState, TaskInfo};
@@ -225,6 +225,22 @@ impl State {
             self.get_current_task()?.map(task_to_info),
             self.list_tasks()?.into_iter().map(task_to_info).collect(),
         ))
+    }
+
+    pub fn events_by_range(
+        &self,
+        start_ts: u64,
+        end_ts: u64,
+    ) -> Result<Vec<HistoryEntry>, String> {
+        let mut connection = self.database.establish_connection();
+        match mappers::history::get_history_by_range(
+            &mut connection,
+            start_ts as i32,
+            end_ts as i32,
+        ) {
+            Ok(entries) => Ok(entries),
+            Err(e) => Err(format!("Error retrieving events by range: '{}'", e)),
+        }
     }
 
     pub fn retro_switch_task(

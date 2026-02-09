@@ -40,6 +40,12 @@ pub enum OClockClientCommand {
     /// Read the current state (json version)
     #[serde(rename_all = "camelCase")]
     JsonState,
+    /// Get history entries within a timestamp range (json version)
+    #[serde(rename_all = "camelCase")]
+    JsonEventsByRange {
+        start_timestamp: u64,
+        end_timestamp: u64,
+    },
     /// Produce the full timesheet
     #[serde(rename_all = "camelCase")]
     Timesheet,

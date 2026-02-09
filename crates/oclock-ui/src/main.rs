@@ -12,6 +12,7 @@ use oclock_idle::IdleEvent;
 use std::time::Duration;
 use tray::{TrayEvent, TrayHandle};
 use views::quick_switch::{QuickSwitchMessage, QuickSwitchView};
+use views::timeline::{TimelineMessage, TimelineView};
 
 /// How often to poll the idle detector (seconds).
 const IDLE_POLL_INTERVAL_SECS: u64 = 5;
@@ -69,6 +70,7 @@ enum Message {
     IdleReturnDismiss,
     IdleReturnKeepCurrent,
     IdleReturnSwitchTask(i32),
+    Timeline(TimelineMessage),
 }
 
 struct App {
@@ -78,6 +80,7 @@ struct App {
     subscribed: bool,
     active_tab: Tab,
     quick_switch: QuickSwitchView,
+    timeline: TimelineView,
     tray_handle: Option<TrayHandle>,
     idle_dialog: Option<IdleReturnDialog>,
 }
@@ -94,6 +97,7 @@ impl App {
             subscribed: false,
             active_tab: Tab::Tasks,
             quick_switch: QuickSwitchView::new(),
+            timeline: TimelineView::new(),
             tray_handle: None,
             idle_dialog: None,
         };
@@ -131,7 +135,14 @@ impl App {
             Message::DaemonEvent(DaemonEvent::StateUpdated(state)) => {
                 self.state = Some(state);
                 self.error = None;
-                self.sync_tray()
+                let tray = self.sync_tray();
+                // Refresh timeline if it's the active tab (state changed = task switched)
+                let timeline = if self.active_tab == Tab::Timeline {
+                    self.fetch_timeline()
+                } else {
+                    Task::none()
+                };
+                Task::batch([tray, timeline])
             }
             Message::DaemonEvent(DaemonEvent::Disconnected) => {
                 self.error = Some("Disconnected from daemon".into());
@@ -141,7 +152,13 @@ impl App {
             Message::CommandResult(Ok(state)) => {
                 self.state = Some(state);
                 self.error = None;
-                self.sync_tray()
+                let tray = self.sync_tray();
+                let timeline = if self.active_tab == Tab::Timeline {
+                    self.fetch_timeline()
+                } else {
+                    Task::none()
+                };
+                Task::batch([tray, timeline])
             }
             Message::CommandResult(Err(err)) => {
                 log::error!("Command failed: {err}");
@@ -151,7 +168,11 @@ impl App {
             Message::QuickSwitch(qs_msg) => self.handle_quick_switch(qs_msg),
             Message::TabSelected(tab) => {
                 self.active_tab = tab;
-                Task::none()
+                if tab == Tab::Timeline && self.timeline.needs_fetch() {
+                    self.fetch_timeline()
+                } else {
+                    Task::none()
+                }
             }
             Message::Tray(event) => self.handle_tray(event),
             Message::TraySynced => Task::none(),
@@ -172,15 +193,35 @@ impl App {
                     .as_secs()
                     .saturating_sub(self.config.idle.threshold_minutes * 60);
                 Task::perform(
-                    oclock_bridge::commands::retro_switch_task(
-                        id as u64,
-                        idle_since,
-                        true,
-                    ),
+                    oclock_bridge::commands::retro_switch_task(id as u64, idle_since, true),
                     |r| Message::CommandResult(r.map_err(|e| e.to_string())),
                 )
             }
+            Message::Timeline(tl_msg) => self.handle_timeline(tl_msg),
         }
+    }
+
+    fn handle_timeline(&mut self, msg: TimelineMessage) -> Task<Message> {
+        match msg {
+            TimelineMessage::BlocksLoaded(_) => {
+                self.timeline.update(msg);
+                Task::none()
+            }
+            _ => {
+                // Navigation messages — update state then fetch
+                self.timeline.update(msg);
+                self.fetch_timeline()
+            }
+        }
+    }
+
+    fn fetch_timeline(&mut self) -> Task<Message> {
+        self.timeline.set_loading();
+        let (start, end) = self.timeline.day_range();
+        Task::perform(
+            oclock_bridge::commands::events_by_range(start, end),
+            |r| Message::Timeline(TimelineMessage::BlocksLoaded(r.map_err(|e| e.to_string()))),
+        )
     }
 
     fn handle_idle(&mut self, event: IdleEvent) -> Task<Message> {
@@ -290,10 +331,8 @@ impl App {
         let tab_bar = self.tab_bar();
 
         let tab_content: Element<'_, Message> = match self.active_tab {
-            Tab::Tasks => self
-                .quick_switch
-                .view(state)
-                .map(Message::QuickSwitch),
+            Tab::Tasks => self.quick_switch.view(state).map(Message::QuickSwitch),
+            Tab::Timeline => self.timeline.view(&self.config).map(Message::Timeline),
             _ => center(text("Coming soon").size(14)).into(),
         };
 
@@ -315,7 +354,6 @@ impl App {
             .padding(24)
             .align_x(Alignment::Center);
 
-        // "Keep current task" button
         col = col.push(
             button(text("Keep current task").size(14))
                 .on_press(Message::IdleReturnKeepCurrent)
@@ -323,7 +361,6 @@ impl App {
                 .width(Length::Fill),
         );
 
-        // Task switch buttons — retroactively switch since idle started
         if let Some(ref state) = self.state {
             for task in state.all_tasks.iter().filter(|t| t.enabled != 0) {
                 let is_current = state.current_task.as_ref().is_some_and(|c| c.id == task.id);
@@ -339,7 +376,6 @@ impl App {
             }
         }
 
-        // Dismiss
         col = col.push(
             button(text("Dismiss").size(14))
                 .on_press(Message::IdleReturnDismiss)
@@ -347,12 +383,7 @@ impl App {
                 .width(Length::Fill),
         );
 
-        center(
-            container(col)
-                .width(320)
-                .padding(8),
-        )
-        .into()
+        center(container(col).width(320).padding(8)).into()
     }
 
     fn tab_bar(&self) -> Element<'_, Message> {
@@ -370,9 +401,7 @@ impl App {
         });
 
         container(
-            row(tabs)
-                .spacing(2)
-                .align_y(Alignment::Center),
+            row(tabs).spacing(2).align_y(Alignment::Center),
         )
         .padding([8, 12])
         .width(Length::Fill)
@@ -421,7 +450,6 @@ fn idle_stream() -> impl iced::futures::Stream<Item = IdleEvent> {
         let threshold = Duration::from_secs(threshold_minutes * 60);
         let poll_interval = Duration::from_secs(IDLE_POLL_INTERVAL_SECS);
 
-        // Detect and create idle monitor in blocking context
         let monitor = tokio::task::spawn_blocking(move || {
             oclock_idle::detect().map(|detector| oclock_idle::IdleMonitor::new(detector, threshold))
         })
@@ -430,13 +458,11 @@ fn idle_stream() -> impl iced::futures::Stream<Item = IdleEvent> {
 
         let Some(mut monitor) = monitor else {
             log::info!("No idle detector available, idle subscription disabled");
-            // Park forever — no events to send
             std::future::pending::<()>().await;
             return;
         };
 
         loop {
-            // Poll in a blocking context since some backends may block briefly
             let event = tokio::task::spawn_blocking(move || {
                 let evt = monitor.poll();
                 (monitor, evt)

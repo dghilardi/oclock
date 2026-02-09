@@ -41,3 +41,13 @@ pub struct TimesheetEntry {
     pub system_event: Option<String>,
     pub amount: i32,
 }
+
+#[derive(Debug, Queryable, Serialize, Clone)]
+pub struct HistoryEntry {
+    pub id: i32,
+    pub ts_start: i32,
+    pub ts_end: Option<i32>,
+    pub system_event: Option<String>,
+    pub task_name: Option<String>,
+    pub task_id: Option<i32>,
+}

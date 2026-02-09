@@ -13,7 +13,8 @@ oclock = { path = "../oclock", features = ["client", "api"] }
 oclock-bridge = { path = "../oclock-bridge" }
 oclock-idle = { path = "../oclock-idle" }
 directories = "6"
-iced = { version = "0.14", features = ["tokio"] }
+chrono = "0.4"
+iced = { version = "0.14", features = ["tokio", "canvas"] }
 ksni = "0.3"
 serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["rt-multi-thread"] }

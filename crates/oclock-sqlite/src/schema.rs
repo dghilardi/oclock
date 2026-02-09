@@ -18,6 +18,17 @@ diesel::table! {
 diesel::joinable!(events -> tasks (task_id));
 
 diesel::table! {
+    v_history (id) {
+        id -> Integer,
+        ts_start -> Integer,
+        ts_end -> Nullable<Integer>,
+        system_event -> Nullable<Text>,
+        task_name -> Nullable<Text>,
+        task_id -> Nullable<Integer>,
+    }
+}
+
+diesel::table! {
     v_timesheet (id) {
         id -> Integer,
         day -> Text,

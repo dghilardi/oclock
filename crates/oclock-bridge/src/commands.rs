@@ -1,6 +1,6 @@
 use oclock::client::handler::{invoke_server, SrvInvocationError};
 use oclock::dto::command::OClockClientCommand;
-use oclock::dto::state::ExportedState;
+use oclock::dto::state::{ExportedState, TimeBlock};
 
 /// Send a command to the daemon and return the new state.
 ///
@@ -30,6 +30,20 @@ pub async fn push_task(name: String) -> Result<ExportedState, SrvInvocationError
 /// Disable a task and return the new state.
 pub async fn disable_task(task_id: u64) -> Result<ExportedState, SrvInvocationError> {
     send_command(OClockClientCommand::JsonDisableTask { task_id }).await
+}
+
+/// Get history entries (time blocks) within a timestamp range.
+pub async fn events_by_range(
+    start_timestamp: u64,
+    end_timestamp: u64,
+) -> Result<Vec<TimeBlock>, SrvInvocationError> {
+    let cmd = OClockClientCommand::JsonEventsByRange {
+        start_timestamp,
+        end_timestamp,
+    };
+    tokio::task::spawn_blocking(move || invoke_server::<_, Vec<TimeBlock>>(cmd))
+        .await
+        .expect("blocking task panicked")
 }
 
 /// Retroactively switch task at a past timestamp.
